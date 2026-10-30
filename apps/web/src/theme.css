@@ -102,6 +102,18 @@ header p { color: var(--muted); }
 .summary-grid article { padding:18px; display:flex; flex-direction:column; gap:5px; }
 .summary-grid strong { font-family:Georgia,serif; font-size:24px; }
 .summary-grid span { color:var(--muted); font-size:12px; }
+.form-card { padding:20px; margin-bottom:18px; }
+.form-card h2 { margin-top:0; }
+.form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:14px; }
+.form-grid label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:12px; }
+.form-grid input,.form-grid textarea { border:1px solid #e0d5d4; border-radius:8px; background:#fff; color:var(--ink); padding:10px; font:inherit; }
+.form-grid textarea { min-height:80px; resize:vertical; }
+.form-grid .wide { grid-column:1/-1; }
+.form-card>button { border:0; border-radius:8px; background:var(--ink); color:#fff; padding:9px 14px; margin-right:12px; }
+.form-card>small { color:var(--muted); }
+.report-preview { background:var(--blush-light); border-radius:10px; padding:16px; margin:14px 0; }
+.report-preview pre { white-space:pre-wrap; margin:0; font:14px/1.8 "Microsoft YaHei",sans-serif; }
+@media(max-width:760px){.form-grid{grid-template-columns:1fr}}
 .live-table-wrap { overflow: auto; max-height: 65vh; }
 .live-table-wrap table { border-collapse: collapse; min-width: 100%; font-size: 12px; white-space: nowrap; }
 .live-table-wrap th,.live-table-wrap td { padding: 9px 11px; border-bottom: 1px solid #eee5e2; border-right: 1px solid #f2eae7; text-align: left; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
