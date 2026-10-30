@@ -30,14 +30,20 @@ type Source = { key: string; name: string; url: string; status: string };
 function SourcesPage() {
   const { data, isLoading } = useQuery({ queryKey: ["sources"], queryFn: () => fetch(`${apiBase}/api/data-sources`).then(r => r.json()) });
   const [results, setResults] = React.useState<Record<string,string>>({});
+  const [structures, setStructures] = React.useState<Record<string,Array<{id:string;name:string;rows?:number;columns?:number}>>>({});
   const test = async (key: string) => {
     setResults(v => ({...v,[key]:"正在读取…"}));
     try { const r = await fetch(`${apiBase}/api/data-sources/${key}/test`); const body = await r.json(); setResults(v => ({...v,[key]:body.ok ? `连接成功 · ${body.objectType}${body.title ? ` · ${body.title}` : ""}` : body.error})); }
     catch { setResults(v => ({...v,[key]:"连接失败，请稍后重试"})); }
   };
+  const readStructure = async (key: string) => {
+    setResults(v => ({...v,[key]:"正在读取表格结构…"}));
+    try { const r = await fetch(`${apiBase}/api/data-sources/${key}/structure`); const body = await r.json(); if (!body.ok) throw new Error(body.error); setStructures(v => ({...v,[key]:body.items})); setResults(v => ({...v,[key]:`已读取 ${body.items.length} 个工作表`})); }
+    catch (error) { setResults(v => ({...v,[key]:error instanceof Error ? error.message : "结构读取失败"})); }
+  };
   return <><header><div><h1>数据源管理</h1><p>只有点击测试或读取时才访问飞书，不持续同步。</p></div></header>
     <div className="notice">当前为只读模式，不会修改飞书原表。</div>
-    <section className="source-grid">{isLoading ? <p>正在加载数据源…</p> : data?.sources?.map((s: Source) => <article className="card source-card" key={s.key}><div><h2>{s.name}</h2><a href={s.url} target="_blank" rel="noreferrer">打开飞书原表</a></div><p>{results[s.key] ?? (s.key === "client-daily" && !data.userAuthorized ? "需要 Lia 完成一次用户只读授权" : s.status)}</p>{s.key === "client-daily" && !data.userAuthorized ? <a className="auth-button" href={`${apiBase}/api/auth/feishu/start`}>授权读取对客表</a> : <button onClick={()=>test(s.key)}>测试只读连接</button>}</article>)}</section>
+    <section className="source-grid">{isLoading ? <p>正在加载数据源…</p> : data?.sources?.map((s: Source) => <article className="card source-card" key={s.key}><div><h2>{s.name}</h2><a href={s.url} target="_blank" rel="noreferrer">打开飞书原表</a></div><p>{results[s.key] ?? (s.key === "client-daily" && !data.userAuthorized ? "需要 Lia 完成一次用户只读授权" : s.status)}</p>{structures[s.key]?.length ? <ul>{structures[s.key].map(item=><li key={item.id}><span>{item.name}</span>{item.rows ? <small>{item.rows} 行 · {item.columns} 列</small>:null}</li>)}</ul>:null}<div className="source-actions">{s.key === "client-daily" && !data.userAuthorized ? <a className="auth-button" href={`${apiBase}/api/auth/feishu/start`}>授权读取对客表</a> : <><button onClick={()=>test(s.key)}>测试连接</button><button className="secondary" onClick={()=>readStructure(s.key)}>读取工作表</button></>}</div></article>)}</section>
   </>;
 }
 

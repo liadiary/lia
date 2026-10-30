@@ -60,3 +60,24 @@ export function getStoredUserToken() {
   const row = db.prepare("SELECT access_token accessToken, expires_at expiresAt FROM oauth_tokens WHERE provider='feishu'").get() as { accessToken: string; expiresAt: number } | undefined;
   return row && row.expiresAt > Date.now() + 60_000 ? row.accessToken : null;
 }
+
+async function feishuGet(url: string, token: string) {
+  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const body = await response.json() as { code?: number; msg?: string; data?: unknown };
+  if (!response.ok || body.code !== 0) throw new Error(`飞书读取失败：${body.code ?? response.status} · ${body.msg ?? "未知原因"}`);
+  return body.data;
+}
+
+export async function readObjectStructure(objectType: string, objectToken: string, token: string) {
+  if (objectType === "bitable") {
+    const data = await feishuGet(`https://open.feishu.cn/open-apis/bitable/v1/apps/${encodeURIComponent(objectToken)}/tables?page_size=100`, token);
+    const parsed = z.object({ items: z.array(z.object({ table_id: z.string(), name: z.string() })) }).parse(data);
+    return { objectType, items: parsed.items.map(item => ({ id: item.table_id, name: item.name })) };
+  }
+  if (objectType === "sheet") {
+    const data = await feishuGet(`https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/${encodeURIComponent(objectToken)}/sheets/query`, token);
+    const parsed = z.object({ sheets: z.array(z.object({ sheet_id: z.string(), title: z.string(), row_count: z.number().optional(), column_count: z.number().optional() })) }).parse(data);
+    return { objectType, items: parsed.sheets.map(sheet => ({ id: sheet.sheet_id, name: sheet.title, rows: sheet.row_count, columns: sheet.column_count })) };
+  }
+  throw new Error(`暂不支持的数据类型：${objectType}`);
+}

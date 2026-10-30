@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { db } from "./db.js";
 import { randomBytes } from "node:crypto";
-import { dataSources, exchangeAuthorizationCode, getStoredUserToken, hasFeishuCredentials, resolveWikiNode } from "./feishu.js";
+import { dataSources, exchangeAuthorizationCode, getStoredUserToken, getTenantToken, hasFeishuCredentials, readObjectStructure, resolveWikiNode } from "./feishu.js";
 
 export const app = express();
 app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"] }));
@@ -31,6 +31,20 @@ const testDataSource = async (req: express.Request, res: express.Response) => {
 };
 app.get("/api/data-sources/:key/test", testDataSource);
 app.post("/api/data-sources/:key/test", testDataSource);
+
+app.get("/api/data-sources/:key/structure", async (req, res) => {
+  const source = dataSources.find(item => item.key === req.params.key);
+  if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
+  try {
+    const token = source.key === "client-daily" ? getStoredUserToken() : await getTenantToken();
+    if (!token) return res.status(401).json({ ok: false, needsUserAuthorization: true, error: "需要重新完成飞书用户授权" });
+    const node = await resolveWikiNode(source.wikiToken, token);
+    const structure = await readObjectStructure(node.obj_type, node.obj_token, token);
+    return res.json({ ok: true, source: source.name, title: node.title ?? source.name, ...structure });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error instanceof Error ? error.message : "读取结构失败" });
+  }
+});
 
 const oauthStates = new Map<string, number>();
 app.get("/api/auth/feishu/start", (_req, res) => {

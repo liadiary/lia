@@ -91,6 +91,11 @@ header p { color: var(--muted); }
 .source-card p { color: var(--muted); min-height: 20px; font-size: 13px; }
 .source-card button { border: 0; border-radius: 8px; background: var(--ink); color: white; padding: 9px 13px; cursor: pointer; }
 .auth-button { display: inline-block; border-radius: 8px; background: var(--ink); color: white !important; padding: 9px 13px; text-decoration: none; }
+.source-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.source-card button.secondary { background: var(--blush-dark); color: var(--ink); }
+.source-card ul { list-style: none; padding: 0; margin: 12px 0; max-height: 220px; overflow: auto; border-top: 1px solid #eee5e2; }
+.source-card li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #eee5e2; font-size: 13px; }
+.source-card li small { color: var(--muted); }
 
 @media (max-width: 720px) {
   .shell { display: block; }
