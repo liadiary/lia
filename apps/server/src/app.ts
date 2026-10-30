@@ -85,7 +85,13 @@ app.get("/api/dashboard", (_req, res) => {
       { key: "settlement", label: "待确认结算", count: count("SELECT COUNT(*) count FROM publications WHERE settlement_status='待确认'"), tone: "blue" }
     ],
     today: { confirmedCreators: 0, confirmedVideos: 0, confirmedAmount: 0, publishedCreators: 0, publishedVideos: 0, publishedAmount: 0 },
-    syncSources: ["内部 Tracker", "对客日常表", "月度结算表", "复投达人表", "Tripo KOL 中台"].map(name => ({ name, status: "尚未连接", lastSync: null }))
+    syncSources: [
+      { name: "内部 Tracker", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
+      { name: "对客日常表", status: getStoredUserToken() ? "已完成用户授权" : "需要用户授权", lastSync: null },
+      { name: "月度结算表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
+      { name: "复投达人表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
+      { name: "Tripo KOL 中台", status: "手动管理", lastSync: null }
+    ]
   });
 });
 
