@@ -4,7 +4,7 @@ import { db } from "./db.js";
 import { dataSources, hasFeishuCredentials, resolveWikiNode } from "./feishu.js";
 
 export const app = express();
-app.use(cors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:5173" }));
+app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"] }));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "lia-workcenter", database: "connected" }));

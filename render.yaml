@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: lia-workcenter-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build -w @lia/server
+    startCommand: npm run start -w @lia/server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_PATH
+        value: /tmp/lia-workcenter.db
+      - key: WEB_ORIGIN
+        value: https://liadiary.github.io
+      - key: FEISHU_APP_ID
+        sync: false
+      - key: FEISHU_APP_SECRET
+        sync: false
