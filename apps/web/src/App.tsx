@@ -195,8 +195,11 @@ function tableRecords(values: unknown[][], keywords: string[]) {
   return { headers, rows };
 }
 const pick = (row: Record<string, unknown>, aliases: string[]) => {
-  const key = Object.keys(row).find((h) => aliases.some((a) => h.includes(a)));
-  return key ? row[key] : "";
+  for (const alias of aliases) {
+    const key = Object.keys(row).find((header) => header.includes(alias));
+    if (key) return row[key];
+  }
+  return "";
 };
 const sameDate = (value: unknown, date: string) => {
   const s = text(value);
