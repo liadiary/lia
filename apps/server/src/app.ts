@@ -15,7 +15,7 @@ app.get("/api/data-sources", (_req, res) => res.json({
   sources: dataSources.map(({ wikiToken: _wikiToken, ...source }) => ({ ...source, status: hasFeishuCredentials() ? "可测试连接" : "等待配置只读凭证" }))
 }));
 
-app.post("/api/data-sources/:key/test", async (req, res) => {
+const testDataSource = async (req: express.Request, res: express.Response) => {
   const source = dataSources.find(item => item.key === req.params.key);
   if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
   try {
@@ -24,7 +24,9 @@ app.post("/api/data-sources/:key/test", async (req, res) => {
   } catch (error) {
     return res.status(hasFeishuCredentials() ? 502 : 503).json({ ok: false, error: error instanceof Error ? error.message : "连接失败" });
   }
-});
+};
+app.get("/api/data-sources/:key/test", testDataSource);
+app.post("/api/data-sources/:key/test", testDataSource);
 
 app.get("/api/dashboard", (_req, res) => {
   const count = (sql: string) => Number((db.prepare(sql).get() as { count: number }).count);

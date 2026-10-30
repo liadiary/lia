@@ -83,6 +83,13 @@ header p { color: var(--muted); }
 .sources div, .metrics div { border-color: #dfcdd0; }
 .online { background: var(--ink); }
 .empty { color: var(--muted); }
+.source-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 18px; }
+.source-card { padding: 20px; }
+.source-card > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.source-card h2 { margin: 0; }
+.source-card a { color: #765f63; font-size: 12px; }
+.source-card p { color: var(--muted); min-height: 20px; font-size: 13px; }
+.source-card button { border: 0; border-radius: 8px; background: var(--ink); color: white; padding: 9px 13px; cursor: pointer; }
 
 @media (max-width: 720px) {
   .shell { display: block; }
@@ -93,4 +100,5 @@ header p { color: var(--muted); }
   header { flex-direction: column; gap: 14px; }
   .header-actions { flex-wrap: wrap; }
   .task-grid, .metrics { grid-template-columns: repeat(2, 1fr); }
+  .source-grid { grid-template-columns: 1fr; }
 }
