@@ -72,7 +72,7 @@ async function readNamedSheets(sourceKey: string, names: string[]) {
   const structure = await readObjectStructure(node.obj_type, node.obj_token, token);
   const selected = structure.items.filter(item => names.some(name => item.name === name || item.name.includes(name)));
   const tables = [];
-  for (const sheet of selected) tables.push({ id: sheet.id, name: sheet.name, values: await readSheetValues(node.obj_token, sheet.id, token, "rows" in sheet ? sheet.rows : undefined, "columns" in sheet ? sheet.columns : undefined) });
+  for (const sheet of selected) tables.push({ id: sheet.id, name: sheet.name, values: await readSheetValues(node.obj_token, sheet.id, token, "rows" in sheet && typeof sheet.rows === "number" ? sheet.rows : undefined, "columns" in sheet && typeof sheet.columns === "number" ? sheet.columns : undefined) });
   return tables;
 }
 
