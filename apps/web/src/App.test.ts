@@ -19,6 +19,18 @@ describe("日报计算", () => {
           ["2026-10-30", "A", "https://x/1 https://x/2", "$800"],
           ["2026-10-30", "未发布达人", "", "$9,999"],
           ["2026-10-30", "重复记录", "https://x/1", "$9,999"],
+          [
+            "2026-10-30",
+            "同一TikTok",
+            "https://www.tiktok.com/@a/video/123?_r=1",
+            "$9,999",
+          ],
+          [
+            "2026-10-30",
+            "同一TikTok重复",
+            "https://www.tiktok.com/@b/video/123?utm_source=x",
+            "$9,999",
+          ],
           ["2026-10-29", "B", "https://x/3", "$300"],
         ],
       },
@@ -31,10 +43,10 @@ describe("日报计算", () => {
     );
     expect(result["今日确认达人"]).toBe(1);
     expect(result["今日确认视频"]).toBe(2);
-    expect(result["今日发布视频"]).toBe(2);
-    expect(result["今日发布金额"]).toBe(800);
+    expect(result["今日发布视频"]).toBe(3);
+    expect(result["今日发布金额"]).toBe(10799);
     expect(result["本月确认达人"]).toBe(2);
     expect(result["本月确认金额"]).toBe(1500);
-    expect(result["本月发布视频"]).toBe(3);
+    expect(result["本月发布视频"]).toBe(4);
   });
 });

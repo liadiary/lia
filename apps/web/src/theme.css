@@ -114,6 +114,10 @@ header p { color: var(--muted); }
 .report-preview { background:var(--blush-light); border-radius:10px; padding:16px; margin:14px 0; }
 .report-preview pre { white-space:pre-wrap; margin:0; font:14px/1.8 "Microsoft YaHei",sans-serif; }
 @media(max-width:760px){.form-grid{grid-template-columns:1fr}}
+.audit { padding:16px; margin:16px 0; overflow:auto; }
+.audit summary { cursor:pointer; font-weight:700; }
+.audit table { width:100%; border-collapse:collapse; margin-top:12px; font-size:12px; }
+.audit th,.audit td { text-align:left; padding:8px; border-bottom:1px solid #eee5e2; }
 .live-table-wrap { overflow: auto; max-height: 65vh; }
 .live-table-wrap table { border-collapse: collapse; min-width: 100%; font-size: 12px; white-space: nowrap; }
 .live-table-wrap th,.live-table-wrap td { padding: 9px 11px; border-bottom: 1px solid #eee5e2; border-right: 1px solid #f2eae7; text-align: left; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }

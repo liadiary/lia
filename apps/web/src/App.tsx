@@ -240,6 +240,24 @@ const linkCount = (value: unknown) => new Set(extractLinks(value)).size;
 const normalizeLink = (value: string) => {
   try {
     const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    const path = url.pathname.replace(/\/$/, "");
+    const instagram = path.match(/\/(reel|p|tv)\/([^/]+)/i);
+    if (host.includes("instagram.com") && instagram)
+      return `instagram.com/${instagram[1].toLowerCase()}/${instagram[2]}`;
+    const tiktok = path.match(/\/video\/(\d+)/i);
+    if (host.includes("tiktok.com") && tiktok)
+      return `tiktok.com/video/${tiktok[1]}`;
+    const youtube =
+      host === "youtu.be"
+        ? path.match(/^\/([^/]+)/)?.[1]
+        : (url.searchParams.get("v") ??
+          path.match(/\/(?:shorts|embed)\/([^/]+)/)?.[1]);
+    if ((host.includes("youtube.com") || host === "youtu.be") && youtube)
+      return `youtube.com/video/${youtube}`;
+    const status = path.match(/\/status\/(\d+)/i);
+    if ((host === "x.com" || host.endsWith("twitter.com")) && status)
+      return `x.com/status/${status[1]}`;
     [
       "utm_source",
       "utm_medium",
@@ -256,6 +274,32 @@ const normalizeLink = (value: string) => {
   } catch {
     return value.trim();
   }
+};
+const publicationAudit = (tables: any[], date: string) => {
+  const publication = tables.find((table) => table.name.includes("发布表"));
+  const parsed = tableRecords(publication?.values ?? [], [
+    "发布时间",
+    "达人",
+    "视频链接",
+    "花费",
+  ]);
+  const seen = new Set<string>();
+  const entries: Array<{ creator: string; date: string; link: string }> = [];
+  for (const row of parsed.rows.filter((item) =>
+    monthToDate(pick(item, ["发布时间", "发布日期"]), date),
+  )) {
+    for (const link of extractLinks(pick(row, ["视频链接", "发布链接"]))) {
+      const normalized = normalizeLink(link);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      entries.push({
+        creator: text(pick(row, ["达人名称", "达人"])),
+        date: text(pick(row, ["发布时间", "发布日期"])),
+        link: normalized,
+      });
+    }
+  }
+  return entries;
 };
 const publicationTotals = (rows: Record<string, unknown>[]) => {
   const seen = new Set<string>();
@@ -456,6 +500,8 @@ function LiveDataPage({
     }
   };
   const summary = data ? calculateSummary(type, data.tables, reportDate) : [];
+  const audit =
+    data && type === "daily" ? publicationAudit(data.tables, reportDate) : [];
   const metric = (label: string) =>
     summary.find((item: any) => item.label === label)?.value ?? 0;
   const money = (value: unknown) =>
@@ -664,6 +710,29 @@ function LiveDataPage({
               </article>
             ))}
           </section>
+          {type === "daily" ? (
+            <details className="card audit">
+              <summary>核对本月计入的发布链接（{audit.length}条）</summary>
+              <table>
+                <thead>
+                  <tr>
+                    <th>发布时间</th>
+                    <th>达人</th>
+                    <th>标准化发布链接</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.map((item, index) => (
+                    <tr key={`${item.link}-${index}`}>
+                      <td>{item.date}</td>
+                      <td>{item.creator}</td>
+                      <td>{item.link}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ) : null}
           {data.tables.map((t: any) => (
             <section key={t.id}>
               <h2>
