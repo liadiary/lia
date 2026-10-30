@@ -42,6 +42,7 @@ app.get("/api/auth/feishu/start", (_req, res) => {
   url.searchParams.set("app_id", process.env.FEISHU_APP_ID);
   url.searchParams.set("redirect_uri", callback);
   url.searchParams.set("state", state);
+  url.searchParams.set("scope", "wiki:wiki:readonly sheets:spreadsheet:readonly bitable:app:readonly offline_access");
   res.redirect(url.toString());
 });
 
