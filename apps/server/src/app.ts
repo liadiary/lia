@@ -1,12 +1,30 @@
 import express from "express";
 import cors from "cors";
 import { db } from "./db.js";
+import { dataSources, hasFeishuCredentials, resolveWikiNode } from "./feishu.js";
 
 export const app = express();
 app.use(cors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:5173" }));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "lia-workcenter", database: "connected" }));
+
+app.get("/api/data-sources", (_req, res) => res.json({
+  configured: hasFeishuCredentials(),
+  mode: "manual-read-only",
+  sources: dataSources.map(({ wikiToken: _wikiToken, ...source }) => ({ ...source, status: hasFeishuCredentials() ? "可测试连接" : "等待配置只读凭证" }))
+}));
+
+app.post("/api/data-sources/:key/test", async (req, res) => {
+  const source = dataSources.find(item => item.key === req.params.key);
+  if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
+  try {
+    const node = await resolveWikiNode(source.wikiToken);
+    return res.json({ ok: true, source: source.name, objectType: node.obj_type, title: node.title ?? source.name });
+  } catch (error) {
+    return res.status(hasFeishuCredentials() ? 502 : 503).json({ ok: false, error: error instanceof Error ? error.message : "连接失败" });
+  }
+});
 
 app.get("/api/dashboard", (_req, res) => {
   const count = (sql: string) => Number((db.prepare(sql).get() as { count: number }).count);
