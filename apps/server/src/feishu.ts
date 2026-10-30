@@ -43,6 +43,13 @@ export async function resolveWikiNode(wikiToken: string, userToken?: string) {
 
 const userTokenResponse = z.object({ code: z.number(), msg: z.string().optional(), data: z.object({ access_token: z.string(), expires_in: z.number(), refresh_token: z.string().optional(), refresh_expires_in: z.number().optional() }).optional() });
 
+export type FeishuUserTokens = { accessToken: string; refreshToken?: string; expiresAt: number; refreshExpiresAt?: number };
+
+export function saveUserTokens(tokens: FeishuUserTokens) {
+  db.prepare(`INSERT OR REPLACE INTO oauth_tokens(provider,access_token,refresh_token,expires_at,refresh_expires_at,updated_at) VALUES('feishu',?,?,?,?,CURRENT_TIMESTAMP)`)
+    .run(tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt, tokens.refreshExpiresAt ?? null);
+}
+
 export async function exchangeAuthorizationCode(code: string) {
   const tenantToken = await getTenantToken();
   const response = await fetch("https://open.feishu.cn/open-apis/authen/v1/access_token", {
@@ -52,8 +59,9 @@ export async function exchangeAuthorizationCode(code: string) {
   const result = userTokenResponse.parse(await response.json());
   if (!response.ok || result.code !== 0 || !result.data) throw new Error(`飞书用户授权失败：${result.code} · ${result.msg ?? "未知原因"}`);
   const now = Date.now();
-  db.prepare(`INSERT OR REPLACE INTO oauth_tokens(provider,access_token,refresh_token,expires_at,refresh_expires_at,updated_at) VALUES('feishu',?,?,?,?,CURRENT_TIMESTAMP)`)
-    .run(result.data.access_token, result.data.refresh_token ?? null, now + result.data.expires_in * 1000, result.data.refresh_expires_in ? now + result.data.refresh_expires_in * 1000 : null);
+  const tokens: FeishuUserTokens = { accessToken: result.data.access_token, refreshToken: result.data.refresh_token, expiresAt: now + result.data.expires_in * 1000, refreshExpiresAt: result.data.refresh_expires_in ? now + result.data.refresh_expires_in * 1000 : undefined };
+  saveUserTokens(tokens);
+  return tokens;
 }
 
 export function getStoredUserToken() {

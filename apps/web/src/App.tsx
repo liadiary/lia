@@ -13,7 +13,7 @@ const apiBase = window.location.hostname.endsWith("github.io") ? "https://lia-wo
 
 function Dashboard() {
   const demo = { tasks: [{key:"scripts",label:"待审脚本",count:0,tone:"orange"},{key:"videos",label:"待审视频",count:0,tone:"orange"},{key:"unsynced",label:"WA 已提交、Tracker 未同步",count:0,tone:"red"},{key:"conflicts",label:"多来源版本冲突",count:0,tone:"red"},{key:"settlement",label:"待确认结算",count:0,tone:"blue"}], today:{confirmedCreators:0,confirmedVideos:0,confirmedAmount:0,publishedCreators:0,publishedVideos:0,publishedAmount:0}, syncSources:["内部 Tracker","对客日常表","月度结算表","复投达人表","Tripo KOL 中台"].map(name=>({name,status:"尚未连接",lastSync:null})) };
-  const { data = demo, isLoading, refetch } = useQuery({ queryKey: ["dashboard"], retry: false, queryFn: async () => { try { const r = await fetch(`${apiBase}/api/dashboard`); return r.ok ? await r.json() : demo; } catch { return demo; } } });
+  const { data = demo, isLoading, refetch } = useQuery({ queryKey: ["dashboard"], retry: false, queryFn: async () => { try { const r = await fetch(`${apiBase}/api/dashboard`, { credentials: "include" }); return r.ok ? await r.json() : demo; } catch { return demo; } } });
   if (isLoading) return <p>正在加载工作台…</p>;
   return <>
     <header><div><h1>你好，Lia</h1><p>按需读取最新在线数据，需要时再计算和核对。</p></div><div className="header-actions"><span className="date">{new Intl.DateTimeFormat("zh-CN", { dateStyle: "long" }).format(new Date())}</span><button onClick={()=>refetch()}>读取最新数据</button></div></header>
@@ -28,17 +28,17 @@ function Placeholder({ title }: { title: string }) { return <><header><div><h1>{
 
 type Source = { key: string; name: string; url: string; status: string };
 function SourcesPage() {
-  const { data, isLoading } = useQuery({ queryKey: ["sources"], queryFn: () => fetch(`${apiBase}/api/data-sources`).then(r => r.json()) });
+  const { data, isLoading } = useQuery({ queryKey: ["sources"], queryFn: () => fetch(`${apiBase}/api/data-sources`, { credentials: "include" }).then(r => r.json()) });
   const [results, setResults] = React.useState<Record<string,string>>({});
   const [structures, setStructures] = React.useState<Record<string,Array<{id:string;name:string;rows?:number;columns?:number}>>>({});
   const test = async (key: string) => {
     setResults(v => ({...v,[key]:"正在读取…"}));
-    try { const r = await fetch(`${apiBase}/api/data-sources/${key}/test`); const body = await r.json(); setResults(v => ({...v,[key]:body.ok ? `连接成功 · ${body.objectType}${body.title ? ` · ${body.title}` : ""}` : body.error})); }
+    try { const r = await fetch(`${apiBase}/api/data-sources/${key}/test`, { credentials: "include" }); const body = await r.json(); setResults(v => ({...v,[key]:body.ok ? `连接成功 · ${body.objectType}${body.title ? ` · ${body.title}` : ""}` : body.error})); }
     catch { setResults(v => ({...v,[key]:"连接失败，请稍后重试"})); }
   };
   const readStructure = async (key: string) => {
     setResults(v => ({...v,[key]:"正在读取表格结构…"}));
-    try { const r = await fetch(`${apiBase}/api/data-sources/${key}/structure`); const body = await r.json(); if (!body.ok) throw new Error(body.error); setStructures(v => ({...v,[key]:body.items})); setResults(v => ({...v,[key]:`已读取 ${body.items.length} 个工作表`})); }
+    try { const r = await fetch(`${apiBase}/api/data-sources/${key}/structure`, { credentials: "include" }); const body = await r.json(); if (!body.ok) throw new Error(body.error); setStructures(v => ({...v,[key]:body.items})); setResults(v => ({...v,[key]:`已读取 ${body.items.length} 个工作表`})); }
     catch (error) { setResults(v => ({...v,[key]:error instanceof Error ? error.message : "结构读取失败"})); }
   };
   return <><header><div><h1>数据源管理</h1><p>只有点击测试或读取时才访问飞书，不持续同步。</p></div></header>

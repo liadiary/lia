@@ -1,12 +1,28 @@
 import express from "express";
 import cors from "cors";
 import { db } from "./db.js";
-import { randomBytes } from "node:crypto";
-import { dataSources, exchangeAuthorizationCode, getStoredUserToken, getTenantToken, hasFeishuCredentials, readObjectStructure, resolveWikiNode } from "./feishu.js";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { dataSources, exchangeAuthorizationCode, getStoredUserToken, getTenantToken, hasFeishuCredentials, readObjectStructure, resolveWikiNode, saveUserTokens, type FeishuUserTokens } from "./feishu.js";
 
 export const app = express();
-app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"] }));
+app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"], credentials: true }));
 app.use(express.json({ limit: "10mb" }));
+
+const cookieName = "lia_feishu_session";
+const cookieKey = () => createHash("sha256").update(process.env.FEISHU_APP_SECRET ?? "development-only").digest();
+function sealTokens(tokens: FeishuUserTokens) {
+  const iv = randomBytes(12); const cipher = createCipheriv("aes-256-gcm", cookieKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf8"), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64url");
+}
+function openTokens(value: string) {
+  try { const raw = Buffer.from(value, "base64url"); const decipher = createDecipheriv("aes-256-gcm", cookieKey(), raw.subarray(0,12)); decipher.setAuthTag(raw.subarray(12,28)); return JSON.parse(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8")) as FeishuUserTokens; } catch { return null; }
+}
+app.use((req, _res, next) => {
+  const match = req.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith(`${cookieName}=`));
+  if (match) { const tokens = openTokens(match.slice(cookieName.length + 1)); if (tokens && tokens.expiresAt > Date.now() + 60_000) saveUserTokens(tokens); }
+  next();
+});
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "lia-workcenter", database: "connected" }));
 
@@ -67,7 +83,9 @@ app.get("/api/auth/feishu/callback", async (req, res) => {
   if (!expires || expires < Date.now()) return res.status(400).send("授权请求已过期，请返回 Lia Workcenter 重新开始");
   if (typeof req.query.code !== "string") return res.status(400).send("飞书未返回授权码");
   try {
-    await exchangeAuthorizationCode(req.query.code);
+    const tokens = await exchangeAuthorizationCode(req.query.code);
+    const maxAge = Math.max(3600, Math.floor(((tokens.refreshExpiresAt ?? tokens.expiresAt) - Date.now()) / 1000));
+    res.setHeader("Set-Cookie", `${cookieName}=${sealTokens(tokens)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`);
     res.redirect("https://liadiary.github.io/lia/#/sources?auth=success");
   } catch (error) {
     res.status(502).send(error instanceof Error ? error.message : "飞书授权失败");
