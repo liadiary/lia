@@ -237,6 +237,41 @@ const extractLinks = (value: unknown): string[] => {
   return String(value).match(/https?:\/\/[^\s,，;；]+/g) ?? [];
 };
 const linkCount = (value: unknown) => new Set(extractLinks(value)).size;
+const normalizeLink = (value: string) => {
+  try {
+    const url = new URL(value);
+    [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+      "fbclid",
+      "gclid",
+      "igshid",
+    ].forEach((key) => url.searchParams.delete(key));
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/$/, "");
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
+};
+const publicationTotals = (rows: Record<string, unknown>[]) => {
+  const seen = new Set<string>();
+  let amountTotal = 0;
+  for (const row of rows) {
+    const links = extractLinks(pick(row, ["视频链接", "发布链接"])).map(
+      normalizeLink,
+    );
+    const newLinks = links.filter((link) => link && !seen.has(link));
+    if (newLinks.length) {
+      newLinks.forEach((link) => seen.add(link));
+      amountTotal += amount(pick(row, ["花费", "对客金额"]));
+    }
+  }
+  return { videos: seen.size, amount: amountTotal };
+};
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
     const cooperation = tables.find((t) => t.name.includes("确认合作"));
@@ -271,6 +306,8 @@ export function calculateSummary(type: string, tables: any[], date: string) {
     const publishedMonth = pm.filter(
       (r) => linkCount(pick(r, ["视频链接", "发布链接"])) > 0,
     );
+    const todayPublication = publicationTotals(publishedToday);
+    const monthPublication = publicationTotals(publishedMonth);
     const unique = (rows: any[], aliases: string[]) =>
       new Set(rows.map((r) => text(pick(r, aliases))).filter(Boolean)).size;
     return [
@@ -284,17 +321,11 @@ export function calculateSummary(type: string, tables: any[], date: string) {
       },
       {
         label: "今日发布视频",
-        value: publishedToday.reduce(
-          (n, r) => n + linkCount(pick(r, ["视频链接", "发布链接"])),
-          0,
-        ),
+        value: todayPublication.videos,
       },
       {
         label: "今日发布金额",
-        value: publishedToday.reduce(
-          (n, r) => n + amount(pick(r, ["花费", "对客金额"])),
-          0,
-        ),
+        value: todayPublication.amount,
       },
       {
         label: "本月确认达人",
@@ -313,17 +344,11 @@ export function calculateSummary(type: string, tables: any[], date: string) {
       },
       {
         label: "本月发布视频",
-        value: publishedMonth.reduce(
-          (n, r) => n + linkCount(pick(r, ["视频链接", "发布链接"])),
-          0,
-        ),
+        value: monthPublication.videos,
       },
       {
         label: "本月发布金额",
-        value: publishedMonth.reduce(
-          (n, r) => n + amount(pick(r, ["花费", "对客金额"])),
-          0,
-        ),
+        value: monthPublication.amount,
       },
     ];
   }
