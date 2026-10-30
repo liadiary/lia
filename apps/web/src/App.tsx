@@ -1,11 +1,11 @@
 import React from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { Activity, BookOpenCheck, CircleDollarSign, Database, FileCheck2, LayoutDashboard, RefreshCw, Users } from "lucide-react";
+import { Activity, CircleDollarSign, Database, FileCheck2, LayoutDashboard, RefreshCw, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 const nav = [
   ["/", "今日工作台", LayoutDashboard], ["/creators", "达人中心", Users], ["/reviews", "提审任务", FileCheck2],
-  ["/hub", "团队中台", BookOpenCheck], ["/daily", "日报中心", Activity], ["/settlement", "结算中心", CircleDollarSign],
+  ["/daily", "日报中心", Activity], ["/settlement", "月度结算", CircleDollarSign],
   ["/repurchase", "复投达人", RefreshCw], ["/sources", "数据源管理", Database]
 ] as const;
 
@@ -25,6 +25,14 @@ function Dashboard() {
 }
 
 function Placeholder({ title }: { title: string }) { return <><header><div><h1>{title}</h1><p>功能骨架已就位，将在下一开发阶段接入数据和操作。</p></div></header><div className="card empty"><Database size={36}/><h2>暂无数据</h2><p>可先从数据源管理导入 Excel 或 CSV。</p></div></>; }
+
+function LiveDataPage({ type, title, description }: { type: "daily"|"settlement"|"repurchase"; title: string; description: string }) {
+  const [month, setMonth] = React.useState(String(new Date().getMonth()+1));
+  const [data, setData] = React.useState<any>(null); const [loading,setLoading]=React.useState(false); const [error,setError]=React.useState("");
+  const read = async () => { setLoading(true); setError(""); try { const r=await fetch(`${apiBase}/api/live/${type}?month=${month}`,{credentials:"include"}); const body=await r.json(); if(!body.ok) throw new Error(body.error); setData(body); } catch(e){setError(e instanceof Error?e.message:"读取失败");} finally{setLoading(false);} };
+  const copy = async () => { if(!data) return; const text=data.tables.map((t:any)=>[t.name,...t.values.map((r:any[])=>r.map(v=>String(v??"")).join("\t"))].join("\n")).join("\n\n"); await navigator.clipboard.writeText(text); };
+  return <><header><div><h1>{title}</h1><p>{description}</p></div><div className="header-actions">{type!=="daily"?<select value={month} onChange={e=>setMonth(e.target.value)}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1}月</option>)}</select>:null}<button onClick={read} disabled={loading}>{loading?"正在读取…":"读取最新数据"}</button>{data?<button onClick={copy}>复制结果</button>:null}</div></header>{type==="settlement"?<div className="notice">月度结算用于汇总当月发布、结算金额、播放量、CPM 和确认状态；数据来源为“Tripo 完结链接”。</div>:null}{error?<div className="error">{error}</div>:null}{data?<><div className="notice">读取时间：{new Date(data.readAt).toLocaleString("zh-CN")} · 数据来自飞书在线原表</div>{data.tables.map((t:any)=><section key={t.id}><h2>{t.name}（{Math.max(0,t.values.length-1)} 行）</h2><div className="card live-table-wrap"><table><tbody>{t.values.slice(0,101).map((row:any[],i:number)=><tr key={i}>{row.map((cell:any,j:number)=>i===0?<th key={j}>{String(cell??"")}</th>:<td key={j}>{String(cell??"")}</td>)}</tr>)}</tbody></table></div></section>)}</>:<div className="card empty"><Database size={36}/><h2>等待按需读取</h2><p>点击“读取最新数据”，不会持续同步或修改飞书。</p></div>}</>;
+}
 
 type Source = { key: string; name: string; url: string; status: string };
 function SourcesPage() {
@@ -47,4 +55,4 @@ function SourcesPage() {
   </>;
 }
 
-export function App() { return <div className="shell"><aside><div className="brand"><div>L</div><span>Lia Workcenter<small>工作中心</small></span></div><nav>{nav.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === "/"}><Icon size={19}/>{label}</NavLink>)}</nav><footer><span className="online"></span>只读服务已连接</footer></aside><main><Routes><Route path="/" element={<Dashboard/>}/>{nav.slice(1,-1).map(([to,label]) => <Route key={to} path={to} element={<Placeholder title={label}/>}/>)}<Route path="/sources" element={<SourcesPage/>}/></Routes></main></div>; }
+export function App() { return <div className="shell"><aside><div className="brand"><div>L</div><span>Lia Workcenter<small>工作中心</small></span></div><nav>{nav.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === "/"}><Icon size={19}/>{label}</NavLink>)}</nav><footer><span className="online"></span>只读服务已连接</footer></aside><main><Routes><Route path="/" element={<Dashboard/>}/><Route path="/daily" element={<LiveDataPage type="daily" title="日报中心" description="每天按需读取确认合作达人和发布表，生成当日汇总。"/>}/><Route path="/settlement" element={<LiveDataPage type="settlement" title="月度结算" description="按月份读取完结链接表，核对发布、金额、播放量和 CPM。"/>}/><Route path="/repurchase" element={<LiveDataPage type="repurchase" title="复投达人" description="按月份读取复投达人推荐名单。"/>}/>{nav.filter(([to])=>!["/","/daily","/settlement","/repurchase","/sources"].includes(to)).map(([to,label]) => <Route key={to} path={to} element={<Placeholder title={label}/>}/>)}<Route path="/sources" element={<SourcesPage/>}/></Routes></main></div>; }

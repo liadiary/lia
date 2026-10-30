@@ -89,3 +89,10 @@ export async function readObjectStructure(objectType: string, objectToken: strin
   }
   throw new Error(`暂不支持的数据类型：${objectType}`);
 }
+
+export async function readSheetValues(spreadsheetToken: string, sheetId: string, token: string) {
+  const range = encodeURIComponent(`${sheetId}!A1:ZZ5000`);
+  const data = await feishuGet(`https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${encodeURIComponent(spreadsheetToken)}/values/${range}?valueRenderOption=FormattedValue&dateTimeRenderOption=FormattedString`, token);
+  const parsed = z.object({ valueRange: z.object({ values: z.array(z.array(z.unknown())).optional() }) }).parse(data);
+  return parsed.valueRange.values ?? [];
+}

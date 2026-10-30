@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { db } from "./db.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { dataSources, exchangeAuthorizationCode, getStoredUserToken, getTenantToken, hasFeishuCredentials, readObjectStructure, resolveWikiNode, saveUserTokens, type FeishuUserTokens } from "./feishu.js";
+import { dataSources, exchangeAuthorizationCode, getStoredUserToken, getTenantToken, hasFeishuCredentials, readObjectStructure, readSheetValues, resolveWikiNode, saveUserTokens, type FeishuUserTokens } from "./feishu.js";
 
 export const app = express();
 app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"], credentials: true }));
@@ -62,6 +62,34 @@ app.get("/api/data-sources/:key/structure", async (req, res) => {
   }
 });
 
+async function readNamedSheets(sourceKey: string, names: string[]) {
+  const source = dataSources.find(item => item.key === sourceKey);
+  if (!source) throw new Error("未知数据源");
+  const token = source.key === "client-daily" ? getStoredUserToken() : await getTenantToken();
+  if (!token) throw new Error("需要重新完成飞书用户授权");
+  const node = await resolveWikiNode(source.wikiToken, token);
+  if (node.obj_type !== "sheet") throw new Error("该数据源不是电子表格");
+  const structure = await readObjectStructure(node.obj_type, node.obj_token, token);
+  const selected = structure.items.filter(item => names.some(name => item.name === name || item.name.includes(name)));
+  const tables = [];
+  for (const sheet of selected) tables.push({ id: sheet.id, name: sheet.name, values: await readSheetValues(node.obj_token, sheet.id, token) });
+  return tables;
+}
+
+app.get("/api/live/:type", async (req, res) => {
+  try {
+    const month = typeof req.query.month === "string" ? req.query.month.replace(/[^0-9]/g, "") : String(new Date().getMonth() + 1);
+    let tables;
+    if (req.params.type === "daily") tables = await readNamedSheets("client-daily", ["确认合作达人", "发布表"]);
+    else if (req.params.type === "settlement") tables = await readNamedSheets("settlement", [`${month}月`]);
+    else if (req.params.type === "repurchase") tables = await readNamedSheets("repurchase", [`${month}月复投达人推荐`]);
+    else return res.status(404).json({ ok: false, error: "未知实时数据类型" });
+    return res.json({ ok: true, readAt: new Date().toISOString(), tables });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error instanceof Error ? error.message : "读取实时数据失败" });
+  }
+});
+
 const oauthStates = new Map<string, number>();
 app.get("/api/auth/feishu/start", (_req, res) => {
   if (!process.env.FEISHU_APP_ID) return res.status(503).send("飞书应用尚未配置");
@@ -107,8 +135,7 @@ app.get("/api/dashboard", (_req, res) => {
       { name: "内部 Tracker", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
       { name: "对客日常表", status: getStoredUserToken() ? "已完成用户授权" : "需要用户授权", lastSync: null },
       { name: "月度结算表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
-      { name: "复投达人表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
-      { name: "Tripo KOL 中台", status: "手动管理", lastSync: null }
+      { name: "复投达人表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null }
     ]
   });
 });
