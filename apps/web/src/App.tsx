@@ -37,7 +37,7 @@ function SourcesPage() {
   };
   return <><header><div><h1>数据源管理</h1><p>只有点击测试或读取时才访问飞书，不持续同步。</p></div></header>
     <div className="notice">当前为只读模式，不会修改飞书原表。</div>
-    <section className="source-grid">{isLoading ? <p>正在加载数据源…</p> : data?.sources?.map((s: Source) => <article className="card source-card" key={s.key}><div><h2>{s.name}</h2><a href={s.url} target="_blank" rel="noreferrer">打开飞书原表</a></div><p>{results[s.key] ?? s.status}</p><button onClick={()=>test(s.key)}>测试只读连接</button></article>)}</section>
+    <section className="source-grid">{isLoading ? <p>正在加载数据源…</p> : data?.sources?.map((s: Source) => <article className="card source-card" key={s.key}><div><h2>{s.name}</h2><a href={s.url} target="_blank" rel="noreferrer">打开飞书原表</a></div><p>{results[s.key] ?? (s.key === "client-daily" && !data.userAuthorized ? "需要 Lia 完成一次用户只读授权" : s.status)}</p>{s.key === "client-daily" && !data.userAuthorized ? <a className="auth-button" href={`${apiBase}/api/auth/feishu/start`}>授权读取对客表</a> : <button onClick={()=>test(s.key)}>测试只读连接</button>}</article>)}</section>
   </>;
 }
 

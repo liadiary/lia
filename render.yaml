@@ -13,6 +13,8 @@ services:
         value: /tmp/lia-workcenter.db
       - key: WEB_ORIGIN
         value: https://liadiary.github.io
+      - key: PUBLIC_API_URL
+        value: https://lia-workcenter-api.onrender.com
       - key: FEISHU_APP_ID
         sync: false
       - key: FEISHU_APP_SECRET

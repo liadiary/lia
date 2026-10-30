@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { db } from "./db.js";
 
 const tokenResponse = z.object({ code: z.number(), msg: z.string().optional(), tenant_access_token: z.string().optional(), expire: z.number().optional() });
 const wikiResponse = z.object({ code: z.number(), msg: z.string().optional(), data: z.object({ node: z.object({ obj_type: z.string(), obj_token: z.string(), title: z.string().optional() }) }).optional() });
@@ -12,7 +13,7 @@ export const dataSources = [
 
 export function hasFeishuCredentials() { return Boolean(process.env.FEISHU_APP_ID && process.env.FEISHU_APP_SECRET); }
 
-async function getTenantToken() {
+export async function getTenantToken() {
   if (!hasFeishuCredentials()) throw new Error("尚未配置飞书只读连接凭证");
   const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
     method: "POST", headers: { "content-type": "application/json" },
@@ -24,8 +25,8 @@ async function getTenantToken() {
   return result.tenant_access_token;
 }
 
-export async function resolveWikiNode(wikiToken: string) {
-  const token = await getTenantToken();
+export async function resolveWikiNode(wikiToken: string, userToken?: string) {
+  const token = userToken ?? await getTenantToken();
   const response = await fetch(`https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token=${encodeURIComponent(wikiToken)}`, {
     headers: { authorization: `Bearer ${token}` }
   });
@@ -38,4 +39,24 @@ export async function resolveWikiNode(wikiToken: string) {
   const result = wikiResponse.parse(raw);
   if (result.code !== 0 || !result.data?.node) throw new Error(`Wiki 节点解析失败：${result.msg ?? result.code}`);
   return result.data.node;
+}
+
+const userTokenResponse = z.object({ code: z.number(), msg: z.string().optional(), data: z.object({ access_token: z.string(), expires_in: z.number(), refresh_token: z.string().optional(), refresh_expires_in: z.number().optional() }).optional() });
+
+export async function exchangeAuthorizationCode(code: string) {
+  const tenantToken = await getTenantToken();
+  const response = await fetch("https://open.feishu.cn/open-apis/authen/v1/access_token", {
+    method: "POST", headers: { authorization: `Bearer ${tenantToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ grant_type: "authorization_code", code })
+  });
+  const result = userTokenResponse.parse(await response.json());
+  if (!response.ok || result.code !== 0 || !result.data) throw new Error(`飞书用户授权失败：${result.code} · ${result.msg ?? "未知原因"}`);
+  const now = Date.now();
+  db.prepare(`INSERT OR REPLACE INTO oauth_tokens(provider,access_token,refresh_token,expires_at,refresh_expires_at,updated_at) VALUES('feishu',?,?,?,?,CURRENT_TIMESTAMP)`)
+    .run(result.data.access_token, result.data.refresh_token ?? null, now + result.data.expires_in * 1000, result.data.refresh_expires_in ? now + result.data.refresh_expires_in * 1000 : null);
+}
+
+export function getStoredUserToken() {
+  const row = db.prepare("SELECT access_token accessToken, expires_at expiresAt FROM oauth_tokens WHERE provider='feishu'").get() as { accessToken: string; expiresAt: number } | undefined;
+  return row && row.expiresAt > Date.now() + 60_000 ? row.accessToken : null;
 }

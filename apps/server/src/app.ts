@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { db } from "./db.js";
-import { dataSources, hasFeishuCredentials, resolveWikiNode } from "./feishu.js";
+import { randomBytes } from "node:crypto";
+import { dataSources, exchangeAuthorizationCode, getStoredUserToken, hasFeishuCredentials, resolveWikiNode } from "./feishu.js";
 
 export const app = express();
 app.use(cors({ origin: [process.env.WEB_ORIGIN ?? "http://localhost:5173", "https://liadiary.github.io"] }));
@@ -11,6 +12,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, service: "lia-workcen
 
 app.get("/api/data-sources", (_req, res) => res.json({
   configured: hasFeishuCredentials(),
+  userAuthorized: Boolean(getStoredUserToken()),
   mode: "manual-read-only",
   sources: dataSources.map(({ wikiToken: _wikiToken, ...source }) => ({ ...source, status: hasFeishuCredentials() ? "可测试连接" : "等待配置只读凭证" }))
 }));
@@ -19,7 +21,9 @@ const testDataSource = async (req: express.Request, res: express.Response) => {
   const source = dataSources.find(item => item.key === req.params.key);
   if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
   try {
-    const node = await resolveWikiNode(source.wikiToken);
+    const userToken = source.key === "client-daily" ? getStoredUserToken() : null;
+    if (source.key === "client-daily" && !userToken) return res.status(401).json({ ok: false, needsUserAuthorization: true, error: "对客日常表需要 Lia 完成一次飞书用户授权" });
+    const node = await resolveWikiNode(source.wikiToken, userToken ?? undefined);
     return res.json({ ok: true, source: source.name, objectType: node.obj_type, title: node.title ?? source.name });
   } catch (error) {
     return res.status(hasFeishuCredentials() ? 502 : 503).json({ ok: false, error: error instanceof Error ? error.message : "连接失败" });
@@ -27,6 +31,33 @@ const testDataSource = async (req: express.Request, res: express.Response) => {
 };
 app.get("/api/data-sources/:key/test", testDataSource);
 app.post("/api/data-sources/:key/test", testDataSource);
+
+const oauthStates = new Map<string, number>();
+app.get("/api/auth/feishu/start", (_req, res) => {
+  if (!process.env.FEISHU_APP_ID) return res.status(503).send("飞书应用尚未配置");
+  const state = randomBytes(24).toString("hex");
+  oauthStates.set(state, Date.now() + 10 * 60_000);
+  const callback = `${process.env.PUBLIC_API_URL ?? "https://lia-workcenter-api.onrender.com"}/api/auth/feishu/callback`;
+  const url = new URL("https://accounts.feishu.cn/open-apis/authen/v1/authorize");
+  url.searchParams.set("app_id", process.env.FEISHU_APP_ID);
+  url.searchParams.set("redirect_uri", callback);
+  url.searchParams.set("state", state);
+  res.redirect(url.toString());
+});
+
+app.get("/api/auth/feishu/callback", async (req, res) => {
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const expires = oauthStates.get(state);
+  oauthStates.delete(state);
+  if (!expires || expires < Date.now()) return res.status(400).send("授权请求已过期，请返回 Lia Workcenter 重新开始");
+  if (typeof req.query.code !== "string") return res.status(400).send("飞书未返回授权码");
+  try {
+    await exchangeAuthorizationCode(req.query.code);
+    res.redirect("https://liadiary.github.io/lia/#/sources?auth=success");
+  } catch (error) {
+    res.status(502).send(error instanceof Error ? error.message : "飞书授权失败");
+  }
+});
 
 app.get("/api/dashboard", (_req, res) => {
   const count = (sql: string) => Number((db.prepare(sql).get() as { count: number }).count);

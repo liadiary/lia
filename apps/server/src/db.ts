@@ -89,4 +89,12 @@ CREATE TABLE IF NOT EXISTS sync_logs (
   skipped_count INTEGER NOT NULL DEFAULT 0,
   error_message TEXT
 );
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  provider TEXT PRIMARY KEY,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT,
+  expires_at INTEGER NOT NULL,
+  refresh_expires_at INTEGER,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
