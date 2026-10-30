@@ -21,9 +21,11 @@ const nav = [
   ["/sources", "数据源管理", Database],
 ] as const;
 
-const apiBase = typeof window !== "undefined" && window.location.hostname.endsWith("github.io")
-  ? "https://lia-workcenter-api.onrender.com"
-  : "";
+const apiBase =
+  typeof window !== "undefined" &&
+  window.location.hostname.endsWith("github.io")
+    ? "https://lia-workcenter-api.onrender.com"
+    : "";
 
 function Dashboard() {
   const demo = {
@@ -225,12 +227,16 @@ const monthToDate = (value: unknown, date: string) => {
     dd = match.length === 4 ? Number(match[3]) : Number(match[2]);
   return yy === y && mm === m && dd <= d;
 };
-const linkCount = (value: unknown) => {
-  const s = text(value);
-  if (!s) return 0;
-  const links = s.match(/https?:\/\/[^\s,，;；]+/g);
-  return links?.length ?? 1;
+const extractLinks = (value: unknown): string[] => {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.flatMap(extractLinks);
+  if (typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    return [item.link, item.url, item.href, item.text].flatMap(extractLinks);
+  }
+  return String(value).match(/https?:\/\/[^\s,，;；]+/g) ?? [];
 };
+const linkCount = (value: unknown) => new Set(extractLinks(value)).size;
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
     const cooperation = tables.find((t) => t.name.includes("确认合作"));
@@ -259,6 +265,12 @@ export function calculateSummary(type: string, tables: any[], date: string) {
     const pm = p.rows.filter((r) =>
       monthToDate(pick(r, ["发布时间", "发布日期"]), date),
     );
+    const publishedToday = pr.filter(
+      (r) => linkCount(pick(r, ["视频链接", "发布链接"])) > 0,
+    );
+    const publishedMonth = pm.filter(
+      (r) => linkCount(pick(r, ["视频链接", "发布链接"])) > 0,
+    );
     const unique = (rows: any[], aliases: string[]) =>
       new Set(rows.map((r) => text(pick(r, aliases))).filter(Boolean)).size;
     return [
@@ -272,14 +284,14 @@ export function calculateSummary(type: string, tables: any[], date: string) {
       },
       {
         label: "今日发布视频",
-        value: pr.reduce(
+        value: publishedToday.reduce(
           (n, r) => n + linkCount(pick(r, ["视频链接", "发布链接"])),
           0,
         ),
       },
       {
         label: "今日发布金额",
-        value: pr.reduce(
+        value: publishedToday.reduce(
           (n, r) => n + amount(pick(r, ["花费", "对客金额"])),
           0,
         ),
@@ -301,14 +313,14 @@ export function calculateSummary(type: string, tables: any[], date: string) {
       },
       {
         label: "本月发布视频",
-        value: pm.reduce(
+        value: publishedMonth.reduce(
           (n, r) => n + linkCount(pick(r, ["视频链接", "发布链接"])),
           0,
         ),
       },
       {
         label: "本月发布金额",
-        value: pm.reduce(
+        value: publishedMonth.reduce(
           (n, r) => n + amount(pick(r, ["花费", "对客金额"])),
           0,
         ),
@@ -488,30 +500,119 @@ function LiveDataPage({
         <section className="card form-card">
           <h2>手动填写</h2>
           <div className="form-grid">
-            <label>今日提报量<input value={manual.todayProposal} onChange={(e)=>setManual({...manual,todayProposal:e.target.value})}/></label>
-            <label>后台待审核<input value={manual.pendingReview} onChange={(e)=>setManual({...manual,pendingReview:e.target.value})}/></label>
-            <label>本月累计提报量<input value={manual.monthProposal} onChange={(e)=>setManual({...manual,monthProposal:e.target.value})}/></label>
+            <label>
+              今日提报量
+              <input
+                value={manual.todayProposal}
+                onChange={(e) =>
+                  setManual({ ...manual, todayProposal: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              后台待审核
+              <input
+                value={manual.pendingReview}
+                onChange={(e) =>
+                  setManual({ ...manual, pendingReview: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              本月累计提报量
+              <input
+                value={manual.monthProposal}
+                onChange={(e) =>
+                  setManual({ ...manual, monthProposal: e.target.value })
+                }
+              />
+            </label>
           </div>
-          {data ? <><div className="report-preview"><pre>{dailyText}</pre></div><button onClick={saveSnapshot}>保存当日快照</button><small>已保存 {history.length} 份历史日报</small></> : null}
+          {data ? (
+            <>
+              <div className="report-preview">
+                <pre>{dailyText}</pre>
+              </div>
+              <button onClick={saveSnapshot}>保存当日快照</button>
+              <small>已保存 {history.length} 份历史日报</small>
+            </>
+          ) : null}
         </section>
       ) : type === "repurchase" ? (
         <section className="card form-card">
           <h2>当月客户重点画像</h2>
           <div className="form-grid">
-            <label>月份<input value={profile.month} onChange={(e)=>setProfile({...profile,month:e.target.value})}/></label>
-            <label>重点国家<input value={profile.countries} onChange={(e)=>setProfile({...profile,countries:e.target.value})}/></label>
-            <label>重点语言<input value={profile.languages} onChange={(e)=>setProfile({...profile,languages:e.target.value})}/></label>
-            <label>重点垂类<input value={profile.niches} onChange={(e)=>setProfile({...profile,niches:e.target.value})}/></label>
-            <label>重点平台<input value={profile.platforms} onChange={(e)=>setProfile({...profile,platforms:e.target.value})}/></label>
-            <label>重点达人风格<input value={profile.styles} onChange={(e)=>setProfile({...profile,styles:e.target.value})}/></label>
-            <label className="wide">其他说明<textarea value={profile.notes} onChange={(e)=>setProfile({...profile,notes:e.target.value})}/></label>
+            <label>
+              月份
+              <input
+                value={profile.month}
+                onChange={(e) =>
+                  setProfile({ ...profile, month: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              重点国家
+              <input
+                value={profile.countries}
+                onChange={(e) =>
+                  setProfile({ ...profile, countries: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              重点语言
+              <input
+                value={profile.languages}
+                onChange={(e) =>
+                  setProfile({ ...profile, languages: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              重点垂类
+              <input
+                value={profile.niches}
+                onChange={(e) =>
+                  setProfile({ ...profile, niches: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              重点平台
+              <input
+                value={profile.platforms}
+                onChange={(e) =>
+                  setProfile({ ...profile, platforms: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              重点达人风格
+              <input
+                value={profile.styles}
+                onChange={(e) =>
+                  setProfile({ ...profile, styles: e.target.value })
+                }
+              />
+            </label>
+            <label className="wide">
+              其他说明
+              <textarea
+                value={profile.notes}
+                onChange={(e) =>
+                  setProfile({ ...profile, notes: e.target.value })
+                }
+              />
+            </label>
           </div>
           <button onClick={saveProfile}>保存本月画像</button>
         </section>
       ) : null}
       {type === "daily" ? (
         <div className="notice">
-          数据来源：对客日常表。“确认合作达人”用于合作数据，“发布表”用于发布数据；不读取 Tracker 内部成本。
+          数据来源：对客日常表。“确认合作达人”用于合作数据，“发布表”用于发布数据；不读取
+          Tracker 内部成本。
         </div>
       ) : type === "settlement" ? (
         <div className="notice">
