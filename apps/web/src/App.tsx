@@ -506,7 +506,11 @@ function LiveDataPage({
           <button onClick={saveProfile}>保存本月画像</button>
         </section>
       ) : null}
-      {type === "settlement" ? (
+      {type === "daily" ? (
+        <div className="notice">
+          数据来源：对客日常表。“确认合作达人”用于合作数据，“发布表”用于发布数据；不读取 Tracker 内部成本。
+        </div>
+      ) : type === "settlement" ? (
         <div className="notice">
           月度结算用于汇总当月发布、结算金额、播放量、CPM
           和确认状态；数据来源为“Tripo 完结链接”。
@@ -721,7 +725,7 @@ export function App() {
               <LiveDataPage
                 type="daily"
                 title="日报中心"
-                description="按日期读取发布表，只汇总当天已经发布的内容。"
+                description="按日期读取对客日常表，生成当天及本月至今的合作日报。"
               />
             }
           />
