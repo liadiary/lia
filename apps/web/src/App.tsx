@@ -283,38 +283,42 @@ const publicationAudit = (tables: any[], date: string) => {
     "视频链接",
     "花费",
   ]);
-  const seen = new Set<string>();
   const entries: Array<{ creator: string; date: string; link: string }> = [];
   for (const row of parsed.rows.filter((item) =>
     monthToDate(pick(item, ["发布时间", "发布日期"]), date),
   )) {
-    for (const link of extractLinks(pick(row, ["视频链接", "发布链接"]))) {
-      const normalized = normalizeLink(link);
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      entries.push({
-        creator: text(pick(row, ["达人名称", "达人"])),
-        date: text(pick(row, ["发布时间", "发布日期"])),
-        link: normalized,
-      });
-    }
+    const links = [
+      ...new Set(
+        extractLinks(pick(row, ["视频链接", "发布链接"]))
+          .map(normalizeLink)
+          .filter(Boolean),
+      ),
+    ];
+    if (!links.length) continue;
+    entries.push({
+      creator: text(pick(row, ["达人名称", "达人"])),
+      date: text(pick(row, ["发布时间", "发布日期"])),
+      link: links.join(" · "),
+    });
   }
   return entries;
 };
 const publicationTotals = (rows: Record<string, unknown>[]) => {
-  const seen = new Set<string>();
+  let videos = 0;
   let amountTotal = 0;
   for (const row of rows) {
-    const links = extractLinks(pick(row, ["视频链接", "发布链接"])).map(
-      normalizeLink,
+    const links = new Set(
+      extractLinks(pick(row, ["视频链接", "发布链接"]))
+        .map(normalizeLink)
+        .filter(Boolean),
     );
-    const newLinks = links.filter((link) => link && !seen.has(link));
-    if (newLinks.length) {
-      newLinks.forEach((link) => seen.add(link));
+    // 一个发布表记录代表一条合作视频；同一格里的多个链接只是跨平台分发。
+    if (links.size) {
+      videos += 1;
       amountTotal += amount(pick(row, ["花费", "对客金额"]));
     }
   }
-  return { videos: seen.size, amount: amountTotal };
+  return { videos, amount: amountTotal };
 };
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
@@ -712,13 +716,13 @@ function LiveDataPage({
           </section>
           {type === "daily" ? (
             <details className="card audit">
-              <summary>核对本月计入的发布链接（{audit.length}条）</summary>
+              <summary>核对本月计入的发布记录（{audit.length}条视频）</summary>
               <table>
                 <thead>
                   <tr>
                     <th>发布时间</th>
                     <th>达人</th>
-                    <th>标准化发布链接</th>
+                    <th>该视频的发布平台链接</th>
                   </tr>
                 </thead>
                 <tbody>
