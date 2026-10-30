@@ -1,0 +1,14 @@
+{
+  "name": "lia-workcenter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,WEB -c yellow,cyan \"npm run dev -w @lia/server\" \"npm run dev -w @lia/web\"",
+    "build": "npm run build -w @lia/shared && npm run build -w @lia/server && npm run build -w @lia/web",
+    "test": "npm run test -w @lia/shared && npm run test -w @lia/server && npm run test -w @lia/web"
+  },
+  "devDependencies": { "concurrently": "^9.2.1", "typescript": "^5.9.3" }
+}
