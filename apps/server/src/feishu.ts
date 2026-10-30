@@ -29,8 +29,13 @@ export async function resolveWikiNode(wikiToken: string) {
   const response = await fetch(`https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token=${encodeURIComponent(wikiToken)}`, {
     headers: { authorization: `Bearer ${token}` }
   });
-  if (!response.ok) throw new Error(`Wiki 节点解析网络错误（${response.status}）`);
-  const result = wikiResponse.parse(await response.json());
+  const raw = await response.json() as unknown;
+  if (!response.ok) {
+    const detail = z.object({ code: z.number().optional(), msg: z.string().optional() }).safeParse(raw);
+    const message = detail.success ? `${detail.data.code ?? response.status} · ${detail.data.msg ?? "未知原因"}` : String(response.status);
+    throw new Error(`Wiki 节点解析失败：${message}`);
+  }
+  const result = wikiResponse.parse(raw);
   if (result.code !== 0 || !result.data?.node) throw new Error(`Wiki 节点解析失败：${result.msg ?? result.code}`);
   return result.data.node;
 }
