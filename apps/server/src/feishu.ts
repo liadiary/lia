@@ -90,9 +90,16 @@ export async function readObjectStructure(objectType: string, objectToken: strin
   throw new Error(`暂不支持的数据类型：${objectType}`);
 }
 
-export async function readSheetValues(spreadsheetToken: string, sheetId: string, token: string) {
-  const range = encodeURIComponent(`${sheetId}!A1:ZZ5000`);
-  const data = await feishuGet(`https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${encodeURIComponent(spreadsheetToken)}/values/${range}?valueRenderOption=FormattedValue&dateTimeRenderOption=FormattedString`, token);
-  const parsed = z.object({ valueRange: z.object({ values: z.array(z.array(z.unknown())).optional() }) }).parse(data);
-  return parsed.valueRange.values ?? [];
+function columnName(index: number) { let value=""; for(let n=index;n>0;n=Math.floor((n-1)/26)) value=String.fromCharCode(65+(n-1)%26)+value; return value; }
+
+export async function readSheetValues(spreadsheetToken: string, sheetId: string, token: string, rowCount=1000, columnCount=30) {
+  const rows: unknown[][]=[]; const lastRow=Math.min(Math.max(rowCount,1),5000); const lastColumn=columnName(Math.min(Math.max(columnCount,1),52));
+  for(let start=1;start<=lastRow;start+=100) {
+    const end=Math.min(start+99,lastRow); const range=encodeURIComponent(`${sheetId}!A${start}:${lastColumn}${end}`);
+    const data=await feishuGet(`https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${encodeURIComponent(spreadsheetToken)}/values/${range}?valueRenderOption=FormattedValue&dateTimeRenderOption=FormattedString`,token);
+    const parsed=z.object({valueRange:z.object({values:z.array(z.array(z.unknown())).optional()})}).parse(data); const chunk=parsed.valueRange.values??[];
+    rows.push(...chunk);
+    if(chunk.length===0 || (chunk.length<100 && chunk.every(row=>row.every(value=>String(value??"").trim()==="")))) break;
+  }
+  return rows;
 }
