@@ -80,9 +80,9 @@ app.get("/api/live/:type", async (req, res) => {
   try {
     const month = typeof req.query.month === "string" ? req.query.month.replace(/[^0-9]/g, "") : String(new Date().getMonth() + 1);
     let tables;
-    if (req.params.type === "daily") tables = await readNamedSheets("client-daily", ["确认合作达人", "发布表"]);
+    if (req.params.type === "daily") tables = await readNamedSheets("client-daily", ["发布表"]);
     else if (req.params.type === "settlement") tables = await readNamedSheets("settlement", [`${month}月`]);
-    else if (req.params.type === "repurchase") tables = await readNamedSheets("repurchase", [`${month}月复投达人推荐`]);
+    else if (req.params.type === "repurchase") tables = await readNamedSheets("client-daily", ["发布表"]);
     else return res.status(404).json({ ok: false, error: "未知实时数据类型" });
     return res.json({ ok: true, readAt: new Date().toISOString(), tables });
   } catch (error) {
