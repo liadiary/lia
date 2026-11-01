@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateSummary } from "./App";
+import { buildRepurchaseCandidates, calculateSummary } from "./App";
 
 describe("日报计算", () => {
   it("分别计算当天和本月至今的合作及发布数据", () => {
@@ -77,5 +77,95 @@ describe("日报计算", () => {
     expect(result["发布视频"]).toBe(2);
     expect(result["结算金额"]).toBe("$1,200");
     expect(result["缺发布链接"]).toBe(1);
+  });
+
+  it("按照当月画像筛选、合并并排序复投候选", () => {
+    const tables = [
+      {
+        name: "发布表",
+        values: [
+          [
+            "发布时间",
+            "达人名称",
+            "达人主页",
+            "视频链接",
+            "国家",
+            "语言",
+            "内容垂类",
+            "平台",
+            "播放量",
+            "CPM",
+            "备注",
+          ],
+          [
+            "2026-09-01",
+            "A",
+            "https://instagram.com/a",
+            "https://instagram.com/reel/1",
+            "美国",
+            "英语",
+            "科技",
+            "Instagram",
+            "100000",
+            "$12",
+            "合作顺利",
+          ],
+          [
+            "2026-10-01",
+            "A",
+            "https://instagram.com/a",
+            "https://instagram.com/reel/2",
+            "美国",
+            "英语",
+            "科技",
+            "Instagram",
+            "200000",
+            "$10",
+            "",
+          ],
+          [
+            "2026-10-02",
+            "B",
+            "https://instagram.com/b",
+            "https://instagram.com/reel/3",
+            "美国",
+            "英语",
+            "科技",
+            "Instagram",
+            "300000",
+            "$8",
+            "不推荐，交付体验差",
+          ],
+          [
+            "2026-10-03",
+            "C",
+            "https://tiktok.com/@c",
+            "https://tiktok.com/@c/video/4",
+            "法国",
+            "法语",
+            "美妆",
+            "TikTok",
+            "50000",
+            "$20",
+            "",
+          ],
+        ],
+      },
+    ];
+    const candidates = buildRepurchaseCandidates(tables, {
+      month: "11月",
+      countries: "美国",
+      languages: "英语",
+      niches: "科技",
+      platforms: "Instagram",
+      styles: "",
+      notes: "",
+    });
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].creator).toBe("A");
+    expect(candidates[0].historyCount).toBe(2);
+    expect(candidates[0].match).toBe("高");
+    expect(candidates[0].views).toBe("150,000");
+    expect(candidates[0].cpm).toBe("$11.00");
   });
 });

@@ -316,6 +316,206 @@ const publicationTotals = (rows: Record<string, unknown>[]) => {
   }
   return { videos, amount: amountTotal };
 };
+
+type RepurchaseProfile = {
+  month: string;
+  countries: string;
+  languages: string;
+  niches: string;
+  platforms: string;
+  styles: string;
+  notes: string;
+};
+
+type RepurchaseCandidate = {
+  creator: string;
+  homepage: string;
+  operator: string;
+  niche: string;
+  countryLanguage: string;
+  historyCount: number;
+  publishLinks: string;
+  publishDates: string;
+  views: string;
+  cpm: string;
+  match: string;
+  reason: string;
+  risk: string;
+  confirmed: string;
+  score: number;
+};
+
+const preferenceTokens = (value: string) =>
+  value
+    .split(/[，,、/；;\s]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+export function buildRepurchaseCandidates(
+  tables: any[],
+  profile: RepurchaseProfile,
+): RepurchaseCandidate[] {
+  const publication = tables.find((table) => table.name.includes("发布表"));
+  const parsed = tableRecords(publication?.values ?? [], [
+    "达人",
+    "视频链接",
+    "发布时间",
+    "播放量",
+    "CPM",
+  ]);
+  const groups = new Map<string, any>();
+  for (const row of parsed.rows) {
+    const publishLinks = extractLinks(pick(row, ["视频链接", "发布链接"]));
+    if (!publishLinks.length) continue;
+    const creator = text(pick(row, ["达人名称", "达人", "博主名称", "账号"]));
+    const homepageCell = pick(row, [
+      "达人主页",
+      "主页链接",
+      "达人链接",
+      "账号链接",
+    ]);
+    const homepage = extractLinks(homepageCell)[0] ?? text(homepageCell);
+    if (!creator && !homepage) continue;
+    const key = (homepage || creator).trim().toLowerCase();
+    const current = groups.get(key) ?? {
+      creator,
+      homepage,
+      operator: "",
+      niche: "",
+      country: "",
+      language: "",
+      style: "",
+      platforms: new Set<string>(),
+      publishLinks: new Set<string>(),
+      publishDates: new Set<string>(),
+      historyCount: 0,
+      views: 0,
+      viewRecords: 0,
+      cpmTotal: 0,
+      cpmRecords: 0,
+      notes: new Set<string>(),
+    };
+    current.creator ||= creator;
+    current.homepage ||= homepage;
+    current.operator ||= text(pick(row, ["对接运营", "运营", "负责人", "BD"]));
+    current.niche ||= text(pick(row, ["内容垂类", "达人垂类", "垂类", "类型"]));
+    current.country ||= text(pick(row, ["国家", "地区", "达人国家"]));
+    current.language ||= text(pick(row, ["语言", "达人语言"]));
+    current.style ||= text(pick(row, ["达人风格", "内容风格", "风格"]));
+    const rowPlatform = text(pick(row, ["平台", "发布平台"]));
+    if (rowPlatform) current.platforms.add(rowPlatform);
+    publishLinks.forEach((link) => {
+      current.publishLinks.add(link);
+      try {
+        current.platforms.add(new URL(link).hostname.replace(/^www\./, ""));
+      } catch {
+        // 保留表格已有的平台字段即可。
+      }
+    });
+    const publishDate = text(pick(row, ["发布时间", "发布日期"]));
+    if (publishDate) current.publishDates.add(publishDate);
+    current.historyCount += 1;
+    const rowViews = amount(pick(row, ["播放量", "浏览量", "Views", "view"]));
+    if (rowViews > 0) {
+      current.views += rowViews;
+      current.viewRecords += 1;
+    }
+    const rowCpm = amount(pick(row, ["CPM", "cpm"]));
+    if (rowCpm > 0) {
+      current.cpmTotal += rowCpm;
+      current.cpmRecords += 1;
+    }
+    const note = text(
+      pick(row, ["备注", "评价", "合作体验", "风险", "是否推荐", "账号状态"]),
+    );
+    if (note) current.notes.add(note);
+    groups.set(key, current);
+  }
+
+  const preferences = [
+    ["国家", preferenceTokens(profile.countries)],
+    ["语言", preferenceTokens(profile.languages)],
+    ["垂类", preferenceTokens(profile.niches)],
+    ["平台", preferenceTokens(profile.platforms)],
+    ["风格", preferenceTokens(profile.styles)],
+  ] as const;
+  const preferenceCount = preferences.filter(
+    ([, tokens]) => tokens.length,
+  ).length;
+  const hardRisk = /假号|不推荐|拉黑|数据异常|内容质量差|交付体验差|拒绝复投/i;
+
+  return [...groups.values()]
+    .filter((group) => !hardRisk.test([...group.notes].join(" ")))
+    .map((group): RepurchaseCandidate => {
+      const searchable: Record<string, string> = {
+        国家: group.country,
+        语言: group.language,
+        垂类: group.niche,
+        平台: [...group.platforms].join(" "),
+        风格: group.style,
+      };
+      const matched = preferences
+        .filter(([, tokens]) => tokens.length)
+        .filter(([label, tokens]) =>
+          tokens.some((token) =>
+            searchable[label].toLowerCase().includes(token),
+          ),
+        )
+        .map(([label]) => label);
+      const ratio = preferenceCount ? matched.length / preferenceCount : 0;
+      const score =
+        matched.length * 4 +
+        Math.min(group.historyCount, 5) * 2 +
+        (group.viewRecords ? 1 : 0) +
+        (group.cpmRecords ? 1 : 0);
+      const averageViews = group.viewRecords
+        ? Math.round(group.views / group.viewRecords).toLocaleString("en-US")
+        : "数据待补充";
+      const averageCpm = group.cpmRecords
+        ? `$${(group.cpmTotal / group.cpmRecords).toFixed(2)}`
+        : "数据待补充";
+      const risk: string[] = [];
+      if (!group.homepage) risk.push("缺达人主页");
+      if (!group.viewRecords) risk.push("缺播放量");
+      if (!group.cpmRecords) risk.push("缺CPM");
+      return {
+        creator: group.creator || "待补充",
+        homepage: group.homepage || "待补充",
+        operator: group.operator || "待补充",
+        niche: group.niche || "待补充",
+        countryLanguage:
+          [group.country, group.language].filter(Boolean).join(" / ") ||
+          "待补充",
+        historyCount: group.historyCount,
+        publishLinks: [...group.publishLinks].join("\n"),
+        publishDates: [...group.publishDates].sort().join("、") || "待补充",
+        views: averageViews,
+        cpm: averageCpm,
+        match: preferenceCount
+          ? ratio >= 0.6
+            ? "高"
+            : matched.length
+              ? "中"
+              : "低"
+          : "待填写画像",
+        reason: [
+          matched.length ? `匹配${matched.join("、")}` : "历史合作候选",
+          `历史发布${group.historyCount}次`,
+        ].join("；"),
+        risk: risk.join("；") || "暂无明显风险",
+        confirmed: "待 Lia 确认",
+        score,
+      };
+    })
+    .filter((candidate) =>
+      preferenceCount
+        ? candidate.match !== "低" || candidate.historyCount >= 2
+        : candidate.historyCount >= 1,
+    )
+    .sort((a, b) => b.score - a.score || b.historyCount - a.historyCount)
+    .slice(0, 30);
+}
+
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
     const cooperation = tables.find((t) => t.name.includes("确认合作"));
@@ -513,6 +713,14 @@ function LiveDataPage({
   const summary = data
     ? calculateSummary(type, data.tables, calculationDate)
     : [];
+  const candidates =
+    data && type === "repurchase"
+      ? buildRepurchaseCandidates(data.tables, profile)
+      : [];
+  const displayedSummary =
+    type === "repurchase" && data
+      ? [{ label: "本月复投候选", value: candidates.length }, ...summary]
+      : summary;
   const audit =
     data && type === "daily" ? publicationAudit(data.tables, reportDate) : [];
   const metric = (label: string) =>
@@ -522,17 +730,55 @@ function LiveDataPage({
   const dailyText = `【合作日报】\n\n${reportDate.slice(5).replace("-", "")}进展：今日提报量${manual.todayProposal || "待填写"}（后台待审核${manual.pendingReview || "待填写"}），确认合作${metric("今日确认达人")}位，确认合作${metric("今日确认视频")}条；今日发布量${metric("今日发布视频")}，发布金额${money(metric("今日发布金额"))}\n\n本月合作进展：\n➡️ 截至目前本月总共提报量${manual.monthProposal || "待填写"}，确定合作数${metric("本月确认达人")}位达人&${metric("本月确认视频")}条视频\n\n➡️ 本月确定合作金额${money(metric("本月确认金额"))}\n\n➡️ 本月发布量${metric("本月发布视频")}，发布金额${money(metric("本月发布金额"))}`;
   const copy = async () => {
     if (!data) return;
+    const candidateHeaders = [
+      "推荐达人",
+      "达人主页",
+      "对接运营",
+      "内容垂类",
+      "国家和语言",
+      "历史合作次数",
+      "历史发布链接",
+      "发布时间",
+      "播放量",
+      "CPM",
+      "当月画像匹配程度",
+      "推荐依据",
+      "风险或注意事项",
+      "Lia 是否确认",
+    ];
     const output =
       type === "daily"
         ? dailyText
-        : data.tables
-            .map((t: any) =>
-              [
-                t.name,
-                ...t.values.map((r: any[]) => r.map(text).join("\t")),
-              ].join("\n"),
-            )
-            .join("\n\n");
+        : type === "repurchase"
+          ? [
+              candidateHeaders.join("\t"),
+              ...candidates.map((candidate) =>
+                [
+                  candidate.creator,
+                  candidate.homepage,
+                  candidate.operator,
+                  candidate.niche,
+                  candidate.countryLanguage,
+                  candidate.historyCount,
+                  candidate.publishLinks.replace(/\n/g, " "),
+                  candidate.publishDates,
+                  candidate.views,
+                  candidate.cpm,
+                  candidate.match,
+                  candidate.reason,
+                  candidate.risk,
+                  candidate.confirmed,
+                ].join("\t"),
+              ),
+            ].join("\n")
+          : data.tables
+              .map((t: any) =>
+                [
+                  t.name,
+                  ...t.values.map((r: any[]) => r.map(text).join("\t")),
+                ].join("\n"),
+              )
+              .join("\n\n");
     await navigator.clipboard.writeText(output);
   };
   const saveSnapshot = () => {
@@ -704,7 +950,7 @@ function LiveDataPage({
         </div>
       ) : type === "repurchase" ? (
         <div className="notice">
-          复投候选来自历史发布表；系统负责汇总表现，你确认后再填写复投推荐表。
+          系统从对客“发布表”合并历史达人，排除明确不推荐或存在严重风险的记录，再结合当月客户重点画像自动筛选并排序。这里只展示前30位候选，不再展示全部发布明细；你在此基础上做二次确认。
         </div>
       ) : null}
       {error ? <div className="error">{error}</div> : null}
@@ -715,7 +961,7 @@ function LiveDataPage({
             数据来自飞书在线原表
           </div>
           <section className="summary-grid">
-            {summary.map((item) => (
+            {displayedSummary.map((item) => (
               <article className="card" key={item.label}>
                 <strong>{item.value}</strong>
                 <span>{item.label}</span>
@@ -745,30 +991,83 @@ function LiveDataPage({
               </table>
             </details>
           ) : null}
-          {data.tables.map((t: any) => (
-            <section key={t.id}>
-              <h2>
-                {t.name}（{Math.max(0, t.values.length - 1)} 行）
-              </h2>
+          {type === "repurchase" ? (
+            <section>
+              <h2>系统初筛复投候选（最多30位）</h2>
               <div className="card live-table-wrap">
                 <table>
+                  <thead>
+                    <tr>
+                      <th>推荐达人</th>
+                      <th>达人主页</th>
+                      <th>对接运营</th>
+                      <th>内容垂类</th>
+                      <th>国家和语言</th>
+                      <th>历史合作次数</th>
+                      <th>历史发布链接</th>
+                      <th>发布时间</th>
+                      <th>播放量</th>
+                      <th>CPM</th>
+                      <th>画像匹配</th>
+                      <th>推荐依据</th>
+                      <th>风险或注意事项</th>
+                      <th>Lia 是否确认</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {t.values.slice(0, 101).map((row: any[], i: number) => (
-                      <tr key={i}>
-                        {row.map((cell: any, j: number) =>
-                          i === 0 ? (
-                            <th key={j}>{text(cell)}</th>
-                          ) : (
-                            <td key={j}>{text(cell)}</td>
-                          ),
-                        )}
+                    {candidates.map((candidate) => (
+                      <tr key={`${candidate.homepage}-${candidate.creator}`}>
+                        <td>{candidate.creator}</td>
+                        <td>{candidate.homepage}</td>
+                        <td>{candidate.operator}</td>
+                        <td>{candidate.niche}</td>
+                        <td>{candidate.countryLanguage}</td>
+                        <td>{candidate.historyCount}</td>
+                        <td>{candidate.publishLinks}</td>
+                        <td>{candidate.publishDates}</td>
+                        <td>{candidate.views}</td>
+                        <td>{candidate.cpm}</td>
+                        <td>{candidate.match}</td>
+                        <td>{candidate.reason}</td>
+                        <td>{candidate.risk}</td>
+                        <td>{candidate.confirmed}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {!candidates.length ? (
+                <div className="notice">
+                  暂无符合当前画像的候选，请补充或放宽上方重点画像后重新查看。
+                </div>
+              ) : null}
             </section>
-          ))}
+          ) : (
+            data.tables.map((t: any) => (
+              <section key={t.id}>
+                <h2>
+                  {t.name}（{Math.max(0, t.values.length - 1)} 行）
+                </h2>
+                <div className="card live-table-wrap">
+                  <table>
+                    <tbody>
+                      {t.values.slice(0, 101).map((row: any[], i: number) => (
+                        <tr key={i}>
+                          {row.map((cell: any, j: number) =>
+                            i === 0 ? (
+                              <th key={j}>{text(cell)}</th>
+                            ) : (
+                              <td key={j}>{text(cell)}</td>
+                            ),
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))
+          )}
         </>
       ) : (
         <div className="card empty">
