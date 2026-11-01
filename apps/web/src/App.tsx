@@ -676,6 +676,7 @@ function LiveDataPage({
   const [data, setData] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [needsAuthorization, setNeedsAuthorization] = React.useState(false);
   const [manual, setManual] = React.useState({
     todayProposal: "",
     pendingReview: "",
@@ -693,12 +694,26 @@ function LiveDataPage({
   const read = async () => {
     setLoading(true);
     setError("");
+    setNeedsAuthorization(false);
     try {
       const r = await fetch(`${apiBase}/api/live/${type}?month=${month}`, {
         credentials: "include",
       });
       const body = await r.json();
-      if (!body.ok) throw new Error(body.error);
+      if (!body.ok) {
+        if (
+          body.needsUserAuthorization ||
+          String(body.error).includes("授权")
+        ) {
+          setNeedsAuthorization(true);
+          const returnTo = window.location.hash.split("?")[0] || "#/repurchase";
+          window.location.assign(
+            `${apiBase}/api/auth/feishu/start?return_to=${encodeURIComponent(returnTo)}`,
+          );
+          return;
+        }
+        throw new Error(body.error);
+      }
       setData(body);
     } catch (e) {
       setError(e instanceof Error ? e.message : "读取失败");
@@ -736,14 +751,10 @@ function LiveDataPage({
       "对接运营",
       "内容垂类",
       "国家和语言",
-      "历史合作次数",
       "历史发布链接",
-      "发布时间",
       "播放量",
       "CPM",
-      "当月画像匹配程度",
       "推荐依据",
-      "风险或注意事项",
       "Lia 是否确认",
     ];
     const output =
@@ -759,14 +770,10 @@ function LiveDataPage({
                   candidate.operator,
                   candidate.niche,
                   candidate.countryLanguage,
-                  candidate.historyCount,
                   candidate.publishLinks.replace(/\n/g, " "),
-                  candidate.publishDates,
                   candidate.views,
                   candidate.cpm,
-                  candidate.match,
                   candidate.reason,
-                  candidate.risk,
                   candidate.confirmed,
                 ].join("\t"),
               ),
@@ -953,6 +960,17 @@ function LiveDataPage({
           系统从对客“发布表”合并历史达人，排除明确不推荐或存在严重风险的记录，再结合当月客户重点画像自动筛选并排序。这里只展示前30位候选，不再展示全部发布明细；你在此基础上做二次确认。
         </div>
       ) : null}
+      {needsAuthorization ? (
+        <div className="error">
+          飞书授权已失效。
+          <a
+            className="auth-button"
+            href={`${apiBase}/api/auth/feishu/start?return_to=${encodeURIComponent(window.location.hash.split("?")[0] || "#/repurchase")}`}
+          >
+            立即授权飞书
+          </a>
+        </div>
+      ) : null}
       {error ? <div className="error">{error}</div> : null}
       {data ? (
         <>
@@ -1003,14 +1021,10 @@ function LiveDataPage({
                       <th>对接运营</th>
                       <th>内容垂类</th>
                       <th>国家和语言</th>
-                      <th>历史合作次数</th>
                       <th>历史发布链接</th>
-                      <th>发布时间</th>
                       <th>播放量</th>
                       <th>CPM</th>
-                      <th>画像匹配</th>
                       <th>推荐依据</th>
-                      <th>风险或注意事项</th>
                       <th>Lia 是否确认</th>
                     </tr>
                   </thead>
@@ -1022,14 +1036,10 @@ function LiveDataPage({
                         <td>{candidate.operator}</td>
                         <td>{candidate.niche}</td>
                         <td>{candidate.countryLanguage}</td>
-                        <td>{candidate.historyCount}</td>
                         <td>{candidate.publishLinks}</td>
-                        <td>{candidate.publishDates}</td>
                         <td>{candidate.views}</td>
                         <td>{candidate.cpm}</td>
-                        <td>{candidate.match}</td>
                         <td>{candidate.reason}</td>
-                        <td>{candidate.risk}</td>
                         <td>{candidate.confirmed}</td>
                       </tr>
                     ))}

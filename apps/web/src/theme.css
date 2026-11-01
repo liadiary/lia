@@ -176,6 +176,9 @@ header p {
   padding: 9px 13px;
   text-decoration: none;
 }
+.error .auth-button {
+  margin-left: 12px;
+}
 .source-actions {
   display: flex;
   gap: 8px;
@@ -531,6 +534,11 @@ header p {
   }
   .error {
     overflow-wrap: anywhere;
+  }
+  .error .auth-button {
+    display: block;
+    margin: 12px 0 0;
+    text-align: center;
   }
 }
 

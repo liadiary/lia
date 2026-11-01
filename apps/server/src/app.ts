@@ -86,15 +86,19 @@ app.get("/api/live/:type", async (req, res) => {
     else return res.status(404).json({ ok: false, error: "未知实时数据类型" });
     return res.json({ ok: true, readAt: new Date().toISOString(), tables });
   } catch (error) {
-    return res.status(502).json({ ok: false, error: error instanceof Error ? error.message : "读取实时数据失败" });
+    const message = error instanceof Error ? error.message : "读取实时数据失败";
+    const needsUserAuthorization = message.includes("授权");
+    return res.status(needsUserAuthorization ? 401 : 502).json({ ok: false, needsUserAuthorization, error: message });
   }
 });
 
-const oauthStates = new Map<string, number>();
-app.get("/api/auth/feishu/start", (_req, res) => {
+const oauthStates = new Map<string, { expires: number; returnTo: string }>();
+app.get("/api/auth/feishu/start", (req, res) => {
   if (!process.env.FEISHU_APP_ID) return res.status(503).send("飞书应用尚未配置");
   const state = randomBytes(24).toString("hex");
-  oauthStates.set(state, Date.now() + 10 * 60_000);
+  const requestedReturnTo = typeof req.query.return_to === "string" ? req.query.return_to : "#/sources";
+  const returnTo = /^#\/(daily|settlement|repurchase|sources)$/.test(requestedReturnTo) ? requestedReturnTo : "#/sources";
+  oauthStates.set(state, { expires: Date.now() + 10 * 60_000, returnTo });
   const callback = `${process.env.PUBLIC_API_URL ?? "https://lia-workcenter-api.onrender.com"}/api/auth/feishu/callback`;
   const url = new URL("https://accounts.feishu.cn/open-apis/authen/v1/authorize");
   url.searchParams.set("app_id", process.env.FEISHU_APP_ID);
@@ -106,15 +110,15 @@ app.get("/api/auth/feishu/start", (_req, res) => {
 
 app.get("/api/auth/feishu/callback", async (req, res) => {
   const state = typeof req.query.state === "string" ? req.query.state : "";
-  const expires = oauthStates.get(state);
+  const pending = oauthStates.get(state);
   oauthStates.delete(state);
-  if (!expires || expires < Date.now()) return res.status(400).send("授权请求已过期，请返回 Lia Workcenter 重新开始");
+  if (!pending || pending.expires < Date.now()) return res.status(400).send("授权请求已过期，请返回 Lia Workcenter 重新开始");
   if (typeof req.query.code !== "string") return res.status(400).send("飞书未返回授权码");
   try {
     const tokens = await exchangeAuthorizationCode(req.query.code);
     const maxAge = Math.max(3600, Math.floor(((tokens.refreshExpiresAt ?? tokens.expiresAt) - Date.now()) / 1000));
     res.setHeader("Set-Cookie", `${cookieName}=${sealTokens(tokens)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`);
-    res.redirect("https://liadiary.github.io/lia/#/sources?auth=success");
+    res.redirect(`https://liadiary.github.io/lia/${pending.returnTo}?auth=success`);
   } catch (error) {
     res.status(502).send(error instanceof Error ? error.message : "飞书授权失败");
   }
