@@ -333,6 +333,7 @@ type RepurchaseCandidate = {
   operator: string;
   niche: string;
   countryLanguage: string;
+  platformType: string;
   historyCount: number;
   publishLinks: string;
   publishDates: string;
@@ -350,6 +351,16 @@ const preferenceTokens = (value: string) =>
     .split(/[，,、/；;\s]+/)
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+
+const platformTypes = (platforms: string[]) => {
+  const normalized = platforms.join(" ").toLowerCase();
+  const result: string[] = [];
+  if (/instagram|\big\b/.test(normalized)) result.push("IG");
+  if (/youtube|youtu\.be|\byb\b/.test(normalized)) result.push("YB");
+  if (/twitter|x\.com|\bx\b/.test(normalized)) result.push("X");
+  if (/tiktok|\btk\b/.test(normalized)) result.push("TK");
+  return result.join(" / ") || "待补充";
+};
 
 export function buildRepurchaseCandidates(
   tables: any[],
@@ -486,6 +497,7 @@ export function buildRepurchaseCandidates(
         countryLanguage:
           [group.country, group.language].filter(Boolean).join(" / ") ||
           "待补充",
+        platformType: platformTypes([...group.platforms]),
         historyCount: group.historyCount,
         publishLinks: [...group.publishLinks].join("\n"),
         publishDates: [...group.publishDates].sort().join("、") || "待补充",
@@ -751,6 +763,7 @@ function LiveDataPage({
       "对接运营",
       "内容垂类",
       "国家和语言",
+      "平台类型",
       "历史发布链接",
       "播放量",
       "CPM",
@@ -770,6 +783,7 @@ function LiveDataPage({
                   candidate.operator,
                   candidate.niche,
                   candidate.countryLanguage,
+                  candidate.platformType,
                   candidate.publishLinks.replace(/\n/g, " "),
                   candidate.views,
                   candidate.cpm,
@@ -1021,6 +1035,7 @@ function LiveDataPage({
                       <th>对接运营</th>
                       <th>内容垂类</th>
                       <th>国家和语言</th>
+                      <th>平台类型</th>
                       <th>历史发布链接</th>
                       <th>播放量</th>
                       <th>CPM</th>
@@ -1036,6 +1051,7 @@ function LiveDataPage({
                         <td>{candidate.operator}</td>
                         <td>{candidate.niche}</td>
                         <td>{candidate.countryLanguage}</td>
+                        <td>{candidate.platformType}</td>
                         <td>{candidate.publishLinks}</td>
                         <td>{candidate.views}</td>
                         <td>{candidate.cpm}</td>

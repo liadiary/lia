@@ -165,6 +165,7 @@ describe("日报计算", () => {
     expect(candidates[0].creator).toBe("A");
     expect(candidates[0].historyCount).toBe(2);
     expect(candidates[0].match).toBe("高");
+    expect(candidates[0].platformType).toBe("IG");
     expect(candidates[0].views).toBe("150,000");
     expect(candidates[0].cpm).toBe("$11.00");
   });
