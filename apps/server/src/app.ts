@@ -20,15 +20,15 @@ function openTokens(value: string) {
 }
 app.use((req, _res, next) => {
   const match = req.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith(`${cookieName}=`));
-  if (match) { const tokens = openTokens(match.slice(cookieName.length + 1)); if (tokens && tokens.expiresAt > Date.now() + 60_000) saveUserTokens(tokens); }
+  if (match) { const tokens = openTokens(match.slice(cookieName.length + 1)); if (tokens && (tokens.refreshExpiresAt ?? tokens.expiresAt) > Date.now() + 60_000) saveUserTokens(tokens); }
   next();
 });
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "lia-workcenter", database: "connected" }));
 
-app.get("/api/data-sources", (_req, res) => res.json({
+app.get("/api/data-sources", async (_req, res) => res.json({
   configured: hasFeishuCredentials(),
-  userAuthorized: Boolean(getStoredUserToken()),
+  userAuthorized: Boolean(await getStoredUserToken()),
   mode: "manual-read-only",
   sources: dataSources.map(({ wikiToken: _wikiToken, ...source }) => ({ ...source, status: hasFeishuCredentials() ? "可测试连接" : "等待配置只读凭证" }))
 }));
@@ -37,7 +37,7 @@ const testDataSource = async (req: express.Request, res: express.Response) => {
   const source = dataSources.find(item => item.key === req.params.key);
   if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
   try {
-    const userToken = source.key === "client-daily" ? getStoredUserToken() : null;
+    const userToken = source.key === "client-daily" ? await getStoredUserToken() : null;
     if (source.key === "client-daily" && !userToken) return res.status(401).json({ ok: false, needsUserAuthorization: true, error: "对客日常表需要 Lia 完成一次飞书用户授权" });
     const node = await resolveWikiNode(source.wikiToken, userToken ?? undefined);
     return res.json({ ok: true, source: source.name, objectType: node.obj_type, title: node.title ?? source.name });
@@ -52,7 +52,7 @@ app.get("/api/data-sources/:key/structure", async (req, res) => {
   const source = dataSources.find(item => item.key === req.params.key);
   if (!source) return res.status(404).json({ ok: false, error: "未知数据源" });
   try {
-    const token = source.key === "client-daily" ? getStoredUserToken() : await getTenantToken();
+    const token = source.key === "client-daily" ? await getStoredUserToken() : await getTenantToken();
     if (!token) return res.status(401).json({ ok: false, needsUserAuthorization: true, error: "需要重新完成飞书用户授权" });
     const node = await resolveWikiNode(source.wikiToken, token);
     const structure = await readObjectStructure(node.obj_type, node.obj_token, token);
@@ -65,7 +65,7 @@ app.get("/api/data-sources/:key/structure", async (req, res) => {
 async function readNamedSheets(sourceKey: string, names: string[]) {
   const source = dataSources.find(item => item.key === sourceKey);
   if (!source) throw new Error("未知数据源");
-  const token = source.key === "client-daily" ? getStoredUserToken() : await getTenantToken();
+  const token = source.key === "client-daily" ? await getStoredUserToken() : await getTenantToken();
   if (!token) throw new Error("需要重新完成飞书用户授权");
   const node = await resolveWikiNode(source.wikiToken, token);
   if (node.obj_type !== "sheet") throw new Error("该数据源不是电子表格");
@@ -100,7 +100,7 @@ app.get("/api/auth/feishu/start", (_req, res) => {
   url.searchParams.set("app_id", process.env.FEISHU_APP_ID);
   url.searchParams.set("redirect_uri", callback);
   url.searchParams.set("state", state);
-  url.searchParams.set("scope", "wiki:wiki:readonly sheets:spreadsheet:readonly bitable:app:readonly");
+  url.searchParams.set("scope", "wiki:wiki:readonly sheets:spreadsheet:readonly bitable:app:readonly offline_access");
   res.redirect(url.toString());
 });
 
@@ -120,7 +120,7 @@ app.get("/api/auth/feishu/callback", async (req, res) => {
   }
 });
 
-app.get("/api/dashboard", (_req, res) => {
+app.get("/api/dashboard", async (_req, res) => {
   const count = (sql: string) => Number((db.prepare(sql).get() as { count: number }).count);
   res.json({
     tasks: [
@@ -133,7 +133,7 @@ app.get("/api/dashboard", (_req, res) => {
     today: { confirmedCreators: 0, confirmedVideos: 0, confirmedAmount: 0, publishedCreators: 0, publishedVideos: 0, publishedAmount: 0 },
     syncSources: [
       { name: "内部 Tracker", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
-      { name: "对客日常表", status: getStoredUserToken() ? "已完成用户授权" : "需要用户授权", lastSync: null },
+      { name: "对客日常表", status: await getStoredUserToken() ? "已完成用户授权" : "需要用户授权", lastSync: null },
       { name: "月度结算表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null },
       { name: "复投达人表", status: hasFeishuCredentials() ? "可按需读取" : "尚未配置", lastSync: null }
     ]

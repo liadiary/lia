@@ -50,6 +50,30 @@ export function saveUserTokens(tokens: FeishuUserTokens) {
     .run(tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt, tokens.refreshExpiresAt ?? null);
 }
 
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshUserToken(tokens: FeishuUserTokens) {
+  if (!tokens.refreshToken || !tokens.refreshExpiresAt || tokens.refreshExpiresAt <= Date.now() + 60_000) return null;
+  const tenantToken = await getTenantToken();
+  const response = await fetch("https://open.feishu.cn/open-apis/authen/v1/refresh_access_token", {
+    method: "POST", headers: { authorization: `Bearer ${tenantToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ grant_type: "refresh_token", refresh_token: tokens.refreshToken })
+  });
+  const result = userTokenResponse.parse(await response.json());
+  if (!response.ok || result.code !== 0 || !result.data) return null;
+  const now = Date.now();
+  const refreshed: FeishuUserTokens = {
+    accessToken: result.data.access_token,
+    refreshToken: result.data.refresh_token ?? tokens.refreshToken,
+    expiresAt: now + result.data.expires_in * 1000,
+    refreshExpiresAt: result.data.refresh_expires_in
+      ? now + result.data.refresh_expires_in * 1000
+      : tokens.refreshExpiresAt,
+  };
+  saveUserTokens(refreshed);
+  return refreshed.accessToken;
+}
+
 export async function exchangeAuthorizationCode(code: string) {
   const tenantToken = await getTenantToken();
   const response = await fetch("https://open.feishu.cn/open-apis/authen/v1/access_token", {
@@ -64,9 +88,12 @@ export async function exchangeAuthorizationCode(code: string) {
   return tokens;
 }
 
-export function getStoredUserToken() {
-  const row = db.prepare("SELECT access_token accessToken, expires_at expiresAt FROM oauth_tokens WHERE provider='feishu'").get() as { accessToken: string; expiresAt: number } | undefined;
-  return row && row.expiresAt > Date.now() + 60_000 ? row.accessToken : null;
+export async function getStoredUserToken() {
+  const row = db.prepare("SELECT access_token accessToken, refresh_token refreshToken, expires_at expiresAt, refresh_expires_at refreshExpiresAt FROM oauth_tokens WHERE provider='feishu'").get() as FeishuUserTokens | undefined;
+  if (!row) return null;
+  if (row.expiresAt > Date.now() + 60_000) return row.accessToken;
+  if (!refreshInFlight) refreshInFlight = refreshUserToken(row).finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
 }
 
 async function feishuGet(url: string, token: string) {
