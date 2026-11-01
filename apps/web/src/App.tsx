@@ -4,17 +4,13 @@ import {
   Activity,
   CircleDollarSign,
   Database,
-  FileCheck2,
   LayoutDashboard,
   RefreshCw,
-  Users,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 const nav = [
   ["/", "今日工作台", LayoutDashboard],
-  ["/creators", "达人中心", Users],
-  ["/reviews", "提审任务", FileCheck2],
   ["/daily", "日报中心", Activity],
   ["/settlement", "月度结算", CircleDollarSign],
   ["/repurchase", "复投达人", RefreshCw],
@@ -404,36 +400,43 @@ export function calculateSummary(type: string, tables: any[], date: string) {
   const parsed = tableRecords(
     table?.values ?? [],
     type === "settlement"
-      ? ["发布时间", "达人名称", "发布链接", "相关费用", "播放量", "结算"]
+      ? ["发布时间", "达人名称", "视频链接", "花费"]
       : ["推荐达人", "达人链接", "推荐理由", "视频数据"],
   );
-  const rows = parsed.rows;
+  const rows =
+    type === "settlement"
+      ? parsed.rows.filter((row) =>
+          monthToDate(pick(row, ["发布时间", "发布日期"]), date),
+        )
+      : parsed.rows;
   if (type === "settlement") {
-    const links = rows
-      .map((r) => text(pick(r, ["发布链接", "视频链接"])))
-      .filter(Boolean);
-    const duplicates = links.length - new Set(links).size;
+    const published = rows.filter(
+      (row) => extractLinks(pick(row, ["视频链接", "发布链接"])).length > 0,
+    );
+    const totals = publicationTotals(published);
+    const normalizedLinks = published.flatMap((row) =>
+      extractLinks(pick(row, ["视频链接", "发布链接"]))
+        .map(normalizeLink)
+        .filter(Boolean),
+    );
+    const duplicates = normalizedLinks.length - new Set(normalizedLinks).size;
     return [
       {
         label: "发布达人",
         value: new Set(
-          rows.map((r) => text(pick(r, ["达人名称", "达人"]))).filter(Boolean),
+          published
+            .map((r) => text(pick(r, ["达人名称", "达人"])))
+            .filter(Boolean),
         ).size,
       },
-      { label: "发布视频", value: links.length },
+      { label: "发布视频", value: totals.videos },
       {
         label: "结算金额",
-        value: `$${rows.reduce((n, r) => n + amount(pick(r, ["相关费用", "结算金额"])), 0).toFixed(2)}`,
+        value: `$${totals.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
       },
       {
-        label: "缺播放量",
-        value: rows.filter((r) => !amount(pick(r, ["播放量"]))).length,
-      },
-      {
-        label: "待确认结算",
-        value: rows.filter(
-          (r) => !text(pick(r, ["是否确认结算", "确认结算"])).includes("是"),
-        ).length,
+        label: "缺发布链接",
+        value: rows.length - published.length,
       },
       { label: "重复链接", value: duplicates },
     ];
@@ -503,7 +506,13 @@ function LiveDataPage({
       setLoading(false);
     }
   };
-  const summary = data ? calculateSummary(type, data.tables, reportDate) : [];
+  const calculationDate =
+    type === "settlement"
+      ? `${reportDate.slice(0, 4)}-${String(month).padStart(2, "0")}-31`
+      : reportDate;
+  const summary = data
+    ? calculateSummary(type, data.tables, calculationDate)
+    : [];
   const audit =
     data && type === "daily" ? publicationAudit(data.tables, reportDate) : [];
   const metric = (label: string) =>
@@ -691,8 +700,7 @@ function LiveDataPage({
         </div>
       ) : type === "settlement" ? (
         <div className="notice">
-          月度结算用于汇总当月发布、结算金额、播放量、CPM
-          和确认状态；数据来源为“Tripo 完结链接”。
+          月度结算只读取对客日常表的“发布表”。按所选月份统计有有效发布链接的达人、视频和对客发布金额；同一条视频的多个平台链接只计算一次。
         </div>
       ) : type === "repurchase" ? (
         <div className="notice">
@@ -921,6 +929,8 @@ export function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/hub" element={<Navigate to="/" replace />} />
+          <Route path="/creators" element={<Navigate to="/" replace />} />
+          <Route path="/reviews" element={<Navigate to="/" replace />} />
           <Route
             path="/daily"
             element={
@@ -937,7 +947,7 @@ export function App() {
               <LiveDataPage
                 type="settlement"
                 title="月度结算"
-                description="按月份读取完结链接表，核对发布、金额、播放量和 CPM。"
+                description="按月份读取对客发布表，核对已发布达人、视频和发布金额。"
               />
             }
           />

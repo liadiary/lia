@@ -48,4 +48,34 @@ describe("日报计算", () => {
     expect(result["本月发布视频"]).toBe(3);
     expect(result["本月发布金额"]).toBe(1500);
   });
+
+  it("月度结算只统计所选月份对客发布表中的有效发布记录", () => {
+    const tables = [
+      {
+        name: "发布表",
+        values: [
+          ["发布时间", "达人名称", "视频链接", "花费"],
+          [
+            "2026-10-03",
+            "A",
+            "https://instagram.com/reel/one https://x.com/a/status/100",
+            "$800",
+          ],
+          ["2026-10-20", "A", "https://tiktok.com/@a/video/2", "$400"],
+          ["2026-10-21", "B", "", "$9,999"],
+          ["2026-11-01", "C", "https://youtube.com/shorts/three", "$300"],
+        ],
+      },
+    ];
+    const result = Object.fromEntries(
+      calculateSummary("settlement", tables, "2026-10-31").map((item) => [
+        item.label,
+        item.value,
+      ]),
+    );
+    expect(result["发布达人"]).toBe(1);
+    expect(result["发布视频"]).toBe(2);
+    expect(result["结算金额"]).toBe("$1,200");
+    expect(result["缺发布链接"]).toBe(1);
+  });
 });
