@@ -272,21 +272,26 @@ const normalizeLink = (value: string) => {
   }
 };
 const publicationAudit = (tables: any[], date: string) => {
-  const publication = tables.find(
-    (table) => table.name.includes("完结链接") || table.name.includes("发布表"),
+  const completionTables = tables.filter((table) =>
+    table.name.includes("完结链接"),
   );
-  const parsed = tableRecords(publication?.values ?? [], [
-    "发布时间",
-    "达人",
-    "视频链接",
-    "花费",
-  ]);
+  const publicationTables = completionTables.length
+    ? completionTables
+    : tables.filter((table) => table.name.includes("发布表"));
   const entries: Array<{ creator: string; date: string; link: string }> = [];
-  const rows = publication?.name.includes("完结链接")
-    ? parsed.rows
-    : parsed.rows.filter((item) =>
-        monthToDate(pick(item, ["发布时间", "发布日期"]), date),
-      );
+  const rows = publicationTables.flatMap((table) => {
+    const parsed = tableRecords(table.values ?? [], [
+      "发布时间",
+      "达人",
+      "发布链接",
+      "相关费用",
+    ]);
+    return completionTables.length
+      ? parsed.rows
+      : parsed.rows.filter((item) =>
+          monthToDate(pick(item, ["发布时间", "发布日期"]), date),
+        );
+  });
   for (const row of rows) {
     const links = [
       ...new Set(
@@ -538,34 +543,38 @@ export function buildRepurchaseCandidates(
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
     const cooperation = tables.find((t) => t.name.includes("确认合作"));
-    const publication = tables.find(
-      (t) => t.name.includes("完结链接") || t.name.includes("发布表"),
-    );
-    const usesCompletionSheet = publication?.name.includes("完结链接");
+    const completionTables = tables.filter((t) => t.name.includes("完结链接"));
+    const publicationTables = completionTables.length
+      ? completionTables
+      : tables.filter((t) => t.name.includes("发布表"));
+    const usesCompletionSheet = completionTables.length > 0;
     const c = tableRecords(cooperation?.values ?? [], [
       "合作时间",
       "达人",
       "合作数量",
       "合作总额",
     ]);
-    const p = tableRecords(publication?.values ?? [], [
-      "发布时间",
-      "达人",
-      "视频链接",
-      "花费",
-    ]);
+    const publicationRows = publicationTables.flatMap(
+      (table) =>
+        tableRecords(table.values ?? [], [
+          "发布时间",
+          "达人",
+          "发布链接",
+          "相关费用",
+        ]).rows,
+    );
     const cr = c.rows.filter((r) =>
       sameDate(pick(r, ["合作时间", "合作日期"]), date),
     );
-    const pr = p.rows.filter((r) =>
+    const pr = publicationRows.filter((r) =>
       sameDate(pick(r, ["发布时间", "发布日期"]), date),
     );
     const cm = c.rows.filter((r) =>
       monthToDate(pick(r, ["合作时间", "合作日期"]), date),
     );
     const pm = usesCompletionSheet
-      ? p.rows
-      : p.rows.filter((r) =>
+      ? publicationRows
+      : publicationRows.filter((r) =>
           monthToDate(pick(r, ["发布时间", "发布日期"]), date),
         );
     const publishedToday = pr.filter(
@@ -979,7 +988,7 @@ function LiveDataPage({
       ) : null}
       {type === "daily" ? (
         <div className="notice">
-          合作数据读取对客日常表的“确认合作达人”；发布数据读取完结链接中对应月份的工作表。今日发布按发布时间统计，本月累计则统计该月份工作表中所有已填写有效发布链接的记录。
+          合作数据读取对客日常表的“确认合作达人”；发布数据读取完结链接。11月迁移期间会合并“10月”和“11月”工作表，所有已填写有效发布链接的记录都计入11月累计；今日发布仍按发布时间统计。
         </div>
       ) : type === "settlement" ? (
         <div className="notice">

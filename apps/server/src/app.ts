@@ -82,7 +82,9 @@ app.get("/api/live/:type", async (req, res) => {
     let tables;
     if (req.params.type === "daily") {
       const cooperation = await readNamedSheets("client-daily", ["确认合作达人"]);
-      const completed = await readNamedSheets("settlement", [`${month}月`]);
+      const completionSheetNames = month === "11" ? ["10月", "11月"] : [`${month}月`];
+      const completed = await readNamedSheets("settlement", completionSheetNames);
+      if (!completed.length) throw new Error(`完结链接中未找到${completionSheetNames.join("或")}工作表`);
       tables = [
         ...cooperation,
         ...completed.map(table => ({ ...table, name: `完结链接-${table.name}` })),
