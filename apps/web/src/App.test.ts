@@ -49,6 +49,34 @@ describe("日报计算", () => {
     expect(result["本月发布金额"]).toBe(1500);
   });
 
+  it("完结链接中的补录发布全部计入当月累计", () => {
+    const tables = [
+      {
+        name: "确认合作达人",
+        values: [["合作时间", "达人 ID", "合作数量", "合作总额"]],
+      },
+      {
+        name: "完结链接-11月",
+        values: [
+          ["发布时间", "达人名称", "发布链接", "相关费用"],
+          ["2026-11-05", "A", "https://instagram.com/reel/one", "$500"],
+          ["2026-10-20", "B", "https://tiktok.com/@b/video/2", "$300"],
+          ["2026-09-01", "未完结", "", "$9,999"],
+        ],
+      },
+    ];
+    const result = Object.fromEntries(
+      calculateSummary("daily", tables, "2026-11-05").map((item) => [
+        item.label,
+        item.value,
+      ]),
+    );
+    expect(result["今日发布视频"]).toBe(1);
+    expect(result["今日发布金额"]).toBe(500);
+    expect(result["本月发布视频"]).toBe(2);
+    expect(result["本月发布金额"]).toBe(800);
+  });
+
   it("月度结算只统计所选月份对客发布表中的有效发布记录", () => {
     const tables = [
       {

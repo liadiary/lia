@@ -272,7 +272,9 @@ const normalizeLink = (value: string) => {
   }
 };
 const publicationAudit = (tables: any[], date: string) => {
-  const publication = tables.find((table) => table.name.includes("发布表"));
+  const publication = tables.find(
+    (table) => table.name.includes("完结链接") || table.name.includes("发布表"),
+  );
   const parsed = tableRecords(publication?.values ?? [], [
     "发布时间",
     "达人",
@@ -280,9 +282,12 @@ const publicationAudit = (tables: any[], date: string) => {
     "花费",
   ]);
   const entries: Array<{ creator: string; date: string; link: string }> = [];
-  for (const row of parsed.rows.filter((item) =>
-    monthToDate(pick(item, ["发布时间", "发布日期"]), date),
-  )) {
+  const rows = publication?.name.includes("完结链接")
+    ? parsed.rows
+    : parsed.rows.filter((item) =>
+        monthToDate(pick(item, ["发布时间", "发布日期"]), date),
+      );
+  for (const row of rows) {
     const links = [
       ...new Set(
         extractLinks(pick(row, ["视频链接", "发布链接"]))
@@ -311,7 +316,9 @@ const publicationTotals = (rows: Record<string, unknown>[]) => {
     // 一个发布表记录代表一条合作视频；同一格里的多个链接只是跨平台分发。
     if (links.size) {
       videos += 1;
-      amountTotal += amount(pick(row, ["花费", "对客金额"]));
+      amountTotal += amount(
+        pick(row, ["花费", "对客金额", "相关费用", "结算金额"]),
+      );
     }
   }
   return { videos, amount: amountTotal };
@@ -531,7 +538,10 @@ export function buildRepurchaseCandidates(
 export function calculateSummary(type: string, tables: any[], date: string) {
   if (type === "daily") {
     const cooperation = tables.find((t) => t.name.includes("确认合作"));
-    const publication = tables.find((t) => t.name.includes("发布表"));
+    const publication = tables.find(
+      (t) => t.name.includes("完结链接") || t.name.includes("发布表"),
+    );
+    const usesCompletionSheet = publication?.name.includes("完结链接");
     const c = tableRecords(cooperation?.values ?? [], [
       "合作时间",
       "达人",
@@ -553,9 +563,11 @@ export function calculateSummary(type: string, tables: any[], date: string) {
     const cm = c.rows.filter((r) =>
       monthToDate(pick(r, ["合作时间", "合作日期"]), date),
     );
-    const pm = p.rows.filter((r) =>
-      monthToDate(pick(r, ["发布时间", "发布日期"]), date),
-    );
+    const pm = usesCompletionSheet
+      ? p.rows
+      : p.rows.filter((r) =>
+          monthToDate(pick(r, ["发布时间", "发布日期"]), date),
+        );
     const publishedToday = pr.filter(
       (r) => linkCount(pick(r, ["视频链接", "发布链接"])) > 0,
     );
@@ -708,9 +720,14 @@ function LiveDataPage({
     setError("");
     setNeedsAuthorization(false);
     try {
-      const r = await fetch(`${apiBase}/api/live/${type}?month=${month}`, {
-        credentials: "include",
-      });
+      const requestedMonth =
+        type === "daily" ? Number(reportDate.slice(5, 7)) : month;
+      const r = await fetch(
+        `${apiBase}/api/live/${type}?month=${requestedMonth}`,
+        {
+          credentials: "include",
+        },
+      );
       const body = await r.json();
       if (!body.ok) {
         if (
@@ -962,8 +979,7 @@ function LiveDataPage({
       ) : null}
       {type === "daily" ? (
         <div className="notice">
-          数据来源：对客日常表。“确认合作达人”用于合作数据，“发布表”用于发布数据；不读取
-          Tracker 内部成本。
+          合作数据读取对客日常表的“确认合作达人”；发布数据读取完结链接中对应月份的工作表。今日发布按发布时间统计，本月累计则统计该月份工作表中所有已填写有效发布链接的记录。
         </div>
       ) : type === "settlement" ? (
         <div className="notice">
